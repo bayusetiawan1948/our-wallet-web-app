@@ -1,0 +1,758 @@
+/**
+ * ============================================================================
+ * Our Wallets — Scalable Enterprise OKLCH 4-Layer Color System
+ * Architecture: Tailwind CSS v4 CSS-First (@theme inline, @utility, @layer)
+ * Foundation: Radix Mira aesthetics, shadcn/ui, Mist preset
+ * ============================================================================
+ *
+ * COLOR ARCHITECTURE LAYERS:
+ * - Layer 1: Primitive Colors (Raw OKLCH color values & scales)
+ * - Layer 2: Theme Tokens (Interface abstractions: surfaces, text, borders)
+ * - Layer 3: Semantic & Financial Tokens (Income, expense, assets, status)
+ * - Layer 4: Component & State Tokens (Shadcn elements, interactions, charts)
+ */
+
+/* ============================================================================
+ * LAYER 1: PRIMITIVE COLORS (Raw OKLCH Palette Scales)
+ * Pure color scales mapped in OKLCH perceptual space (Lightness, Chroma, Hue).
+ * Does NOT contain UI semantics.
+ * ============================================================================ */
+
+:root {
+  /* Foundation Shadcn Base Variables (Light) */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.148 0.004 228.8);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.148 0.004 228.8);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.148 0.004 228.8);
+  --primary: oklch(0.508 0.118 165.612);
+  --primary-foreground: oklch(0.979 0.021 166.113);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.963 0.002 197.1);
+  --muted-foreground: oklch(0.56 0.021 213.5);
+  --accent: oklch(0.963 0.002 197.1);
+  --accent-foreground: oklch(0.218 0.008 223.9);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.925 0.005 214.3);
+  --input: oklch(0.925 0.005 214.3);
+  --ring: oklch(0.723 0.014 214.4);
+  --chart-1: oklch(0.845 0.143 164.978);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.596 0.145 163.225);
+  --chart-4: oklch(0.508 0.118 165.612);
+  --chart-5: oklch(0.432 0.095 166.913);
+  --radius: 0.45rem;
+  --sidebar: oklch(0.987 0.002 197.1);
+  --sidebar-foreground: oklch(0.148 0.004 228.8);
+  --sidebar-primary: oklch(0.596 0.145 163.225);
+  --sidebar-primary-foreground: oklch(0.979 0.021 166.113);
+  --sidebar-accent: oklch(0.963 0.002 197.1);
+  --sidebar-accent-foreground: oklch(0.218 0.008 223.9);
+  --sidebar-border: oklch(0.925 0.005 214.3);
+  --sidebar-ring: oklch(0.723 0.014 214.4);
+
+  /* Slate / Neutral Scale */
+  --color-primitive-slate-50: oklch(0.985 0.002 220);
+  --color-primitive-slate-100: oklch(0.965 0.004 220);
+  --color-primitive-slate-200: oklch(0.925 0.006 220);
+  --color-primitive-slate-300: oklch(0.865 0.009 220);
+  --color-primitive-slate-400: oklch(0.705 0.015 220);
+  --color-primitive-slate-500: oklch(0.555 0.020 220);
+  --color-primitive-slate-600: oklch(0.425 0.018 220);
+  --color-primitive-slate-700: oklch(0.325 0.015 220);
+  --color-primitive-slate-800: oklch(0.218 0.008 223.9);
+  --color-primitive-slate-900: oklch(0.148 0.004 228.8);
+  --color-primitive-slate-950: oklch(0.100 0.003 228.8);
+
+  /* Emerald / Growth (Income, Profit, Success, Wallet) */
+  --color-primitive-emerald-50: oklch(0.975 0.025 160);
+  --color-primitive-emerald-100: oklch(0.940 0.055 160);
+  --color-primitive-emerald-200: oklch(0.875 0.105 160);
+  --color-primitive-emerald-300: oklch(0.790 0.145 160);
+  --color-primitive-emerald-400: oklch(0.690 0.170 160);
+  --color-primitive-emerald-500: oklch(0.590 0.165 160);
+  --color-primitive-emerald-600: oklch(0.508 0.140 160);
+  --color-primitive-emerald-700: oklch(0.420 0.115 160);
+  --color-primitive-emerald-800: oklch(0.330 0.085 160);
+  --color-primitive-emerald-900: oklch(0.250 0.060 160);
+  --color-primitive-emerald-950: oklch(0.170 0.040 160);
+
+  /* Rose / Outflow (Expense, Loss, Debt, Error) */
+  --color-primitive-rose-50: oklch(0.975 0.020 25);
+  --color-primitive-rose-100: oklch(0.935 0.050 25);
+  --color-primitive-rose-200: oklch(0.870 0.100 25);
+  --color-primitive-rose-300: oklch(0.770 0.160 25);
+  --color-primitive-rose-400: oklch(0.670 0.210 25);
+  --color-primitive-rose-500: oklch(0.577 0.245 27.3);
+  --color-primitive-rose-600: oklch(0.490 0.215 25);
+  --color-primitive-rose-700: oklch(0.410 0.175 25);
+  --color-primitive-rose-800: oklch(0.330 0.135 25);
+  --color-primitive-rose-900: oklch(0.250 0.095 25);
+  --color-primitive-rose-950: oklch(0.170 0.060 25);
+
+  /* Amber / Reserve (Savings, Cash, Warning, Pending, Budget) */
+  --color-primitive-amber-50: oklch(0.980 0.025 85);
+  --color-primitive-amber-100: oklch(0.950 0.060 85);
+  --color-primitive-amber-200: oklch(0.890 0.120 85);
+  --color-primitive-amber-300: oklch(0.810 0.160 85);
+  --color-primitive-amber-400: oklch(0.740 0.175 85);
+  --color-primitive-amber-500: oklch(0.660 0.170 85);
+  --color-primitive-amber-600: oklch(0.560 0.145 85);
+  --color-primitive-amber-700: oklch(0.460 0.115 85);
+  --color-primitive-amber-800: oklch(0.360 0.085 85);
+  --color-primitive-amber-900: oklch(0.270 0.060 85);
+  --color-primitive-amber-950: oklch(0.180 0.040 85);
+
+  /* Sky / Banking (Bank, Credit Card, Info, Processing) */
+  --color-primitive-sky-50: oklch(0.975 0.020 240);
+  --color-primitive-sky-100: oklch(0.935 0.045 240);
+  --color-primitive-sky-200: oklch(0.865 0.090 240);
+  --color-primitive-sky-300: oklch(0.770 0.135 240);
+  --color-primitive-sky-400: oklch(0.670 0.165 240);
+  --color-primitive-sky-500: oklch(0.580 0.160 240);
+  --color-primitive-sky-600: oklch(0.490 0.140 240);
+  --color-primitive-sky-700: oklch(0.400 0.110 240);
+  --color-primitive-sky-800: oklch(0.320 0.085 240);
+  --color-primitive-sky-900: oklch(0.240 0.060 240);
+  --color-primitive-sky-950: oklch(0.170 0.040 240);
+
+  /* Indigo / Capital (Investment, Crypto, Transfer, Securities) */
+  --color-primitive-indigo-50: oklch(0.975 0.020 280);
+  --color-primitive-indigo-100: oklch(0.935 0.050 280);
+  --color-primitive-indigo-200: oklch(0.865 0.100 280);
+  --color-primitive-indigo-300: oklch(0.760 0.160 280);
+  --color-primitive-indigo-400: oklch(0.650 0.200 280);
+  --color-primitive-indigo-500: oklch(0.550 0.210 280);
+  --color-primitive-indigo-600: oklch(0.460 0.180 280);
+  --color-primitive-indigo-700: oklch(0.380 0.145 280);
+  --color-primitive-indigo-800: oklch(0.300 0.110 280);
+  --color-primitive-indigo-900: oklch(0.230 0.075 280);
+  --color-primitive-indigo-950: oklch(0.160 0.050 280);
+
+  /* Cyan / Projection (Stocks, Mutual Funds, Receivable, Forecast, Goal) */
+  --color-primitive-cyan-50: oklch(0.975 0.020 195);
+  --color-primitive-cyan-100: oklch(0.935 0.045 195);
+  --color-primitive-cyan-200: oklch(0.865 0.090 195);
+  --color-primitive-cyan-300: oklch(0.770 0.130 195);
+  --color-primitive-cyan-400: oklch(0.670 0.150 195);
+  --color-primitive-cyan-500: oklch(0.570 0.140 195);
+  --color-primitive-cyan-600: oklch(0.480 0.120 195);
+  --color-primitive-cyan-700: oklch(0.390 0.095 195);
+  --color-primitive-cyan-800: oklch(0.310 0.075 195);
+  --color-primitive-cyan-900: oklch(0.240 0.050 195);
+  --color-primitive-cyan-950: oklch(0.170 0.035 195);
+}
+
+/* ============================================================================
+ * LAYER 2: THEME TOKENS (Interface Abstractions - Light & Dark Modes)
+ * Structural design tokens that drive overall UI surfaces, typography, and borders.
+ * ============================================================================ */
+
+:root {
+  /* Surfaces */
+  --surface: var(--background);
+  --surface-hover: oklch(0.982 0.001 220);
+  --surface-active: oklch(0.950 0.003 214.3);
+  --surface-elevated: var(--card);
+  --surface-overlay: var(--popover);
+
+  /* Text & Content */
+  --text-primary: var(--foreground);
+  --text-secondary: oklch(0.420 0.012 213.5);
+  --text-muted: var(--muted-foreground);
+  --text-disabled: oklch(0.720 0.008 213.5);
+
+  /* Borders & Focus Rings */
+  --border-subtle: oklch(0.955 0.003 214.3);
+  --border-default: var(--border);
+  --border-strong: oklch(0.820 0.010 214.3);
+  --ring-default: var(--ring);
+  --focus-ring: var(--primary);
+
+  /* Shadow & Overlays */
+  --shadow-color: oklch(0.148 0.004 228.8 / 8%);
+  --overlay: oklch(0 0 0 / 45%);
+}
+
+.dark {
+  /* Foundation Shadcn Base Variables (Dark) */
+  --background: oklch(0.148 0.004 228.8);
+  --foreground: oklch(0.987 0.002 197.1);
+  --card: oklch(0.218 0.008 223.9);
+  --card-foreground: oklch(0.987 0.002 197.1);
+  --popover: oklch(0.218 0.008 223.9);
+  --popover-foreground: oklch(0.987 0.002 197.1);
+  --primary: oklch(0.432 0.095 166.913);
+  --primary-foreground: oklch(0.979 0.021 166.113);
+  --secondary: oklch(0.274 0.006 286.033);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.275 0.011 216.9);
+  --muted-foreground: oklch(0.723 0.014 214.4);
+  --accent: oklch(0.275 0.011 216.9);
+  --accent-foreground: oklch(0.987 0.002 197.1);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.56 0.021 213.5);
+  --chart-1: oklch(0.845 0.143 164.978);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.596 0.145 163.225);
+  --chart-4: oklch(0.508 0.118 165.612);
+  --chart-5: oklch(0.432 0.095 166.913);
+  --sidebar: oklch(0.218 0.008 223.9);
+  --sidebar-foreground: oklch(0.987 0.002 197.1);
+  --sidebar-primary: oklch(0.696 0.17 162.48);
+  --sidebar-primary-foreground: oklch(0.262 0.051 172.552);
+  --sidebar-accent: oklch(0.275 0.011 216.9);
+  --sidebar-accent-foreground: oklch(0.987 0.002 197.1);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.56 0.021 213.5);
+
+  /* Surfaces */
+  --surface: var(--background);
+  --surface-hover: oklch(0.180 0.006 223.9);
+  --surface-active: oklch(0.230 0.009 223.9);
+  --surface-elevated: var(--card);
+  --surface-overlay: var(--popover);
+
+  /* Text & Content */
+  --text-primary: var(--foreground);
+  --text-secondary: oklch(0.780 0.012 214.4);
+  --text-muted: var(--muted-foreground);
+  --text-disabled: oklch(0.450 0.010 214.4);
+
+  /* Borders & Focus Rings */
+  --border-subtle: oklch(1 0 0 / 6%);
+  --border-default: var(--border);
+  --border-strong: oklch(1 0 0 / 22%);
+  --ring-default: var(--ring);
+  --focus-ring: var(--primary);
+
+  /* Shadow & Overlays */
+  --shadow-color: oklch(0 0 0 / 50%);
+  --overlay: oklch(0 0 0 / 70%);
+}
+
+/* ============================================================================
+ * LAYER 3: SEMANTIC & FINANCIAL TOKENS
+ * Expresses business logic, status states, and financial domains.
+ * Each semantic entity defines 7 sub-variants (bg, fg, border, hover, active, soft, solid).
+ * ============================================================================ */
+
+:root {
+  /* --- 3.1 INCOME / PROFIT / SUCCESS / GROWTH --- */
+  --semantic-income-bg: var(--color-primitive-emerald-50);
+  --semantic-income-fg: var(--color-primitive-emerald-700);
+  --semantic-income-border: var(--color-primitive-emerald-200);
+  --semantic-income-hover: var(--color-primitive-emerald-100);
+  --semantic-income-active: var(--color-primitive-emerald-200);
+  --semantic-income-soft: oklch(0.965 0.035 160);
+  --semantic-income-solid: var(--color-primitive-emerald-600);
+  --semantic-income-solid-fg: oklch(0.99 0 0);
+
+  /* --- 3.2 EXPENSE / LOSS / DEBT / ERROR / DESTRUCTIVE --- */
+  --semantic-expense-bg: var(--color-primitive-rose-50);
+  --semantic-expense-fg: var(--color-primitive-rose-700);
+  --semantic-expense-border: var(--color-primitive-rose-200);
+  --semantic-expense-hover: var(--color-primitive-rose-100);
+  --semantic-expense-active: var(--color-primitive-rose-200);
+  --semantic-expense-soft: oklch(0.965 0.035 25);
+  --semantic-expense-solid: var(--color-primitive-rose-600);
+  --semantic-expense-solid-fg: oklch(0.99 0 0);
+
+  /* --- 3.3 INVESTMENT / CRYPTO / CAPITAL / TRANSFER --- */
+  --semantic-investment-bg: var(--color-primitive-indigo-50);
+  --semantic-investment-fg: var(--color-primitive-indigo-700);
+  --semantic-investment-border: var(--color-primitive-indigo-200);
+  --semantic-investment-hover: var(--color-primitive-indigo-100);
+  --semantic-investment-active: var(--color-primitive-indigo-200);
+  --semantic-investment-soft: oklch(0.965 0.035 280);
+  --semantic-investment-solid: var(--color-primitive-indigo-600);
+  --semantic-investment-solid-fg: oklch(0.99 0 0);
+
+  /* --- 3.4 SAVINGS / CASH / WARNING / BUDGET / PENDING --- */
+  --semantic-savings-bg: var(--color-primitive-amber-50);
+  --semantic-savings-fg: var(--color-primitive-amber-800);
+  --semantic-savings-border: var(--color-primitive-amber-200);
+  --semantic-savings-hover: var(--color-primitive-amber-100);
+  --semantic-savings-active: var(--color-primitive-amber-200);
+  --semantic-savings-soft: oklch(0.970 0.040 85);
+  --semantic-savings-solid: var(--color-primitive-amber-500);
+  --semantic-savings-solid-fg: oklch(0.12 0.01 85);
+
+  /* --- 3.5 BANK / CREDIT CARD / INFO / PROCESSING --- */
+  --semantic-bank-bg: var(--color-primitive-sky-50);
+  --semantic-bank-fg: var(--color-primitive-sky-700);
+  --semantic-bank-border: var(--color-primitive-sky-200);
+  --semantic-bank-hover: var(--color-primitive-sky-100);
+  --semantic-bank-active: var(--color-primitive-sky-200);
+  --semantic-bank-soft: oklch(0.965 0.030 240);
+  --semantic-bank-solid: var(--color-primitive-sky-600);
+  --semantic-bank-solid-fg: oklch(0.99 0 0);
+
+  /* --- 3.6 STOCKS / MUTUAL FUNDS / RECEIVABLE / FORECAST / GOAL --- */
+  --semantic-stocks-bg: var(--color-primitive-cyan-50);
+  --semantic-stocks-fg: var(--color-primitive-cyan-700);
+  --semantic-stocks-border: var(--color-primitive-cyan-200);
+  --semantic-stocks-hover: var(--color-primitive-cyan-100);
+  --semantic-stocks-active: var(--color-primitive-cyan-200);
+  --semantic-stocks-soft: oklch(0.965 0.030 195);
+  --semantic-stocks-solid: var(--color-primitive-cyan-600);
+  --semantic-stocks-solid-fg: oklch(0.99 0 0);
+
+  /* --- 3.7 WALLET (Primary-linked semantic) --- */
+  --semantic-wallet-bg: var(--color-primitive-emerald-50);
+  --semantic-wallet-fg: var(--primary);
+  --semantic-wallet-border: oklch(0.85 0.05 165);
+  --semantic-wallet-hover: oklch(0.94 0.03 165);
+  --semantic-wallet-active: oklch(0.90 0.04 165);
+  --semantic-wallet-soft: oklch(0.96 0.02 165);
+  --semantic-wallet-solid: var(--primary);
+  --semantic-wallet-solid-fg: var(--primary-foreground);
+}
+
+.dark {
+  /* --- 3.1 INCOME / PROFIT / SUCCESS / GROWTH --- */
+  --semantic-income-bg: oklch(0.200 0.045 160);
+  --semantic-income-fg: var(--color-primitive-emerald-300);
+  --semantic-income-border: oklch(0.320 0.065 160);
+  --semantic-income-hover: oklch(0.240 0.055 160);
+  --semantic-income-active: oklch(0.280 0.065 160);
+  --semantic-income-soft: oklch(0.180 0.035 160);
+  --semantic-income-solid: var(--color-primitive-emerald-500);
+  --semantic-income-solid-fg: oklch(0.99 0 0);
+
+  /* --- 3.2 EXPENSE / LOSS / DEBT / ERROR / DESTRUCTIVE --- */
+  --semantic-expense-bg: oklch(0.200 0.055 25);
+  --semantic-expense-fg: var(--color-primitive-rose-300);
+  --semantic-expense-border: oklch(0.320 0.085 25);
+  --semantic-expense-hover: oklch(0.240 0.065 25);
+  --semantic-expense-active: oklch(0.280 0.075 25);
+  --semantic-expense-soft: oklch(0.180 0.040 25);
+  --semantic-expense-solid: var(--color-primitive-rose-500);
+  --semantic-expense-solid-fg: oklch(0.99 0 0);
+
+  /* --- 3.3 INVESTMENT / CRYPTO / CAPITAL / TRANSFER --- */
+  --semantic-investment-bg: oklch(0.200 0.055 280);
+  --semantic-investment-fg: var(--color-primitive-indigo-300);
+  --semantic-investment-border: oklch(0.320 0.085 280);
+  --semantic-investment-hover: oklch(0.240 0.065 280);
+  --semantic-investment-active: oklch(0.280 0.075 280);
+  --semantic-investment-soft: oklch(0.180 0.040 280);
+  --semantic-investment-solid: var(--color-primitive-indigo-500);
+  --semantic-investment-solid-fg: oklch(0.99 0 0);
+
+  /* --- 3.4 SAVINGS / CASH / WARNING / BUDGET / PENDING --- */
+  --semantic-savings-bg: oklch(0.200 0.045 85);
+  --semantic-savings-fg: var(--color-primitive-amber-300);
+  --semantic-savings-border: oklch(0.320 0.075 85);
+  --semantic-savings-hover: oklch(0.240 0.055 85);
+  --semantic-savings-active: oklch(0.280 0.065 85);
+  --semantic-savings-soft: oklch(0.180 0.035 85);
+  --semantic-savings-solid: var(--color-primitive-amber-500);
+  --semantic-savings-solid-fg: oklch(0.12 0.01 85);
+
+  /* --- 3.5 BANK / CREDIT CARD / INFO / PROCESSING --- */
+  --semantic-bank-bg: oklch(0.200 0.045 240);
+  --semantic-bank-fg: var(--color-primitive-sky-300);
+  --semantic-bank-border: oklch(0.320 0.075 240);
+  --semantic-bank-hover: oklch(0.240 0.055 240);
+  --semantic-bank-active: oklch(0.280 0.065 240);
+  --semantic-bank-soft: oklch(0.180 0.035 240);
+  --semantic-bank-solid: var(--color-primitive-sky-500);
+  --semantic-bank-solid-fg: oklch(0.99 0 0);
+
+  /* --- 3.6 STOCKS / MUTUAL FUNDS / RECEIVABLE / FORECAST / GOAL --- */
+  --semantic-stocks-bg: oklch(0.200 0.045 195);
+  --semantic-stocks-fg: var(--color-primitive-cyan-300);
+  --semantic-stocks-border: oklch(0.320 0.065 195);
+  --semantic-stocks-hover: oklch(0.240 0.055 195);
+  --semantic-stocks-active: oklch(0.280 0.065 195);
+  --semantic-stocks-soft: oklch(0.180 0.035 195);
+  --semantic-stocks-solid: var(--color-primitive-cyan-500);
+  --semantic-stocks-solid-fg: oklch(0.99 0 0);
+
+  /* --- 3.7 WALLET (Primary-linked semantic) --- */
+  --semantic-wallet-bg: oklch(0.190 0.035 165);
+  --semantic-wallet-fg: oklch(0.850 0.100 165);
+  --semantic-wallet-border: oklch(0.300 0.050 165);
+  --semantic-wallet-hover: oklch(0.230 0.040 165);
+  --semantic-wallet-active: oklch(0.270 0.050 165);
+  --semantic-wallet-soft: oklch(0.170 0.025 165);
+  --semantic-wallet-solid: var(--primary);
+  --semantic-wallet-solid-fg: var(--primary-foreground);
+}
+
+/* ============================================================================
+ * LAYER 4: COMPONENT & STATUS TOKENS
+ * Explicit component consumption tokens & system state definitions.
+ * Component layers NEVER consume Layer 1 primitives directly.
+ * ============================================================================ */
+
+:root {
+  /* --- 4.1 COMPONENT TOKENS --- */
+  --button-primary-bg: var(--primary);
+  --button-primary-fg: var(--primary-foreground);
+  --button-primary-hover: oklch(0.460 0.110 165.6);
+  --button-secondary-bg: var(--secondary);
+  --button-secondary-fg: var(--secondary-foreground);
+  --button-secondary-hover: oklch(0.920 0.003 286);
+  --button-destructive-bg: var(--destructive);
+  --button-destructive-fg: oklch(0.99 0 0);
+  --button-destructive-hover: oklch(0.500 0.220 27);
+
+  --input-bg: var(--background);
+  --input-border: var(--border-default);
+  --input-focus-border: var(--focus-ring);
+  --input-focus-ring: oklch(0.508 0.118 165.612 / 20%);
+  --input-placeholder: var(--text-muted);
+
+  --card-bg: var(--card);
+  --card-fg: var(--card-foreground);
+  --card-border: var(--border-default);
+  --card-hover-border: var(--border-strong);
+
+  --popover-bg: var(--popover);
+  --popover-fg: var(--popover-foreground);
+  --popover-border: var(--border-default);
+
+  --dialog-overlay: var(--overlay);
+  --dialog-bg: var(--card);
+
+  --sidebar-bg: var(--sidebar);
+  --sidebar-fg: var(--sidebar-foreground);
+  --sidebar-active-bg: var(--sidebar-accent);
+  --sidebar-border: var(--sidebar-border);
+
+  --table-header-bg: var(--muted);
+  --table-header-fg: var(--text-secondary);
+  --table-row-hover: var(--surface-hover);
+  --table-border: var(--border-subtle);
+
+  --badge-default-bg: var(--secondary);
+  --badge-default-fg: var(--secondary-foreground);
+
+  --alert-info-bg: var(--semantic-bank-bg);
+  --alert-info-fg: var(--semantic-bank-fg);
+  --alert-info-border: var(--semantic-bank-border);
+
+  --tooltip-bg: oklch(0.180 0.005 228.8);
+  --tooltip-fg: oklch(0.987 0.002 197.1);
+
+  --dropdown-bg: var(--popover);
+  --dropdown-item-hover: var(--surface-hover);
+  --dropdown-border: var(--border-default);
+
+  --tabs-list-bg: var(--muted);
+  --tabs-trigger-active-bg: var(--background);
+  --tabs-trigger-active-fg: var(--foreground);
+
+  --accordion-border: var(--border-subtle);
+
+  --navigation-item-hover-bg: var(--surface-hover);
+  --navigation-item-active-bg: var(--accent);
+
+  --toast-bg: var(--card);
+  --toast-fg: var(--card-foreground);
+  --toast-border: var(--border-default);
+
+  --progress-bg: var(--muted);
+  --progress-indicator: var(--primary);
+
+  --skeleton-bg: oklch(0.930 0.004 214.3);
+  --skeleton-pulse: oklch(0.970 0.002 214.3);
+
+  /* --- 4.2 STATUS STATES (Complete Standard Matrix) --- */
+  --status-success-bg: var(--semantic-income-bg);
+  --status-success-fg: var(--semantic-income-fg);
+  --status-success-border: var(--semantic-income-border);
+  --status-success-icon: var(--semantic-income-solid);
+  --status-success-hover: var(--semantic-income-hover);
+
+  --status-warning-bg: var(--semantic-savings-bg);
+  --status-warning-fg: var(--semantic-savings-fg);
+  --status-warning-border: var(--semantic-savings-border);
+  --status-warning-icon: var(--semantic-savings-solid);
+  --status-warning-hover: var(--semantic-savings-hover);
+
+  --status-error-bg: var(--semantic-expense-bg);
+  --status-error-fg: var(--semantic-expense-fg);
+  --status-error-border: var(--semantic-expense-border);
+  --status-error-icon: var(--semantic-expense-solid);
+  --status-error-hover: var(--semantic-expense-hover);
+
+  --status-info-bg: var(--semantic-bank-bg);
+  --status-info-fg: var(--semantic-bank-fg);
+  --status-info-border: var(--semantic-bank-border);
+  --status-info-icon: var(--semantic-bank-solid);
+  --status-info-hover: var(--semantic-bank-hover);
+
+  --status-pending-bg: var(--semantic-savings-soft);
+  --status-pending-fg: var(--semantic-savings-fg);
+  --status-pending-border: var(--semantic-savings-border);
+  --status-pending-icon: var(--semantic-savings-solid);
+
+  --status-draft-bg: var(--muted);
+  --status-draft-fg: var(--text-secondary);
+  --status-draft-border: var(--border-subtle);
+  --status-draft-icon: var(--text-muted);
+
+  --status-archived-bg: oklch(0.95 0 0);
+  --status-archived-fg: var(--text-muted);
+  --status-archived-border: var(--border-subtle);
+  --status-archived-icon: var(--text-muted);
+
+  --status-disabled-bg: var(--muted);
+  --status-disabled-fg: var(--text-disabled);
+  --status-disabled-border: var(--border-subtle);
+  --status-disabled-icon: var(--text-disabled);
+
+  --status-active-bg: var(--semantic-income-soft);
+  --status-active-fg: var(--semantic-income-fg);
+  --status-active-border: var(--semantic-income-border);
+  --status-active-icon: var(--semantic-income-solid);
+
+  --status-inactive-bg: var(--muted);
+  --status-inactive-fg: var(--text-muted);
+  --status-inactive-border: var(--border-subtle);
+  --status-inactive-icon: var(--text-muted);
+
+  /* --- 4.3 INTERACTION TOKENS --- */
+  --state-hover-opacity: 0.90;
+  --state-pressed-opacity: 0.80;
+  --state-selected-bg: var(--accent);
+  --state-focused-ring: var(--focus-ring);
+  --state-dragging-shadow: 0 12px 28px -6px oklch(0 0 0 / 18%);
+  --state-disabled-opacity: 0.50;
+  --state-readonly-bg: var(--muted);
+
+  /* --- 4.4 EXTENDED DATA VISUALIZATION PALETTE --- */
+  /* Sequential (Single Domain Progression) */
+  --chart-seq-1: oklch(0.850 0.140 165);
+  --chart-seq-2: oklch(0.720 0.160 163);
+  --chart-seq-3: oklch(0.600 0.150 163);
+  --chart-seq-4: oklch(0.508 0.118 165.6);
+  --chart-seq-5: oklch(0.400 0.090 167);
+
+  /* Categorical (8 Multi-Hue Extended Dimensions) */
+  --chart-cat-1: oklch(0.650 0.180 160); /* Emerald Growth */
+  --chart-cat-2: oklch(0.600 0.180 245); /* Sky Banking */
+  --chart-cat-3: oklch(0.580 0.220 25);  /* Rose Outflow */
+  --chart-cat-4: oklch(0.680 0.170 85);  /* Amber Savings */
+  --chart-cat-5: oklch(0.550 0.200 280); /* Indigo Capital */
+  --chart-cat-6: oklch(0.600 0.160 195); /* Cyan Projection */
+  --chart-cat-7: oklch(0.620 0.190 330); /* Magenta Dividend */
+  --chart-cat-8: oklch(0.650 0.150 130); /* Lime Yield */
+
+  /* Trends & Time Horizontals */
+  --chart-positive: var(--semantic-income-solid);
+  --chart-negative: var(--semantic-expense-solid);
+  --chart-neutral: var(--text-muted);
+  --chart-historical: var(--text-secondary);
+  --chart-projected: var(--semantic-investment-solid);
+  --chart-forecast-border: var(--semantic-stocks-solid);
+}
+
+.dark {
+  --button-secondary-hover: oklch(0.320 0.008 286);
+  --button-destructive-hover: oklch(0.620 0.210 22);
+
+  --tooltip-bg: oklch(0.987 0.002 197.1);
+  --tooltip-fg: oklch(0.148 0.004 228.8);
+
+  --skeleton-bg: oklch(0.240 0.008 223.9);
+  --skeleton-pulse: oklch(0.290 0.010 223.9);
+
+  --status-archived-bg: oklch(0.220 0 0);
+
+  /* Chart Dark Theme Adjustments */
+  --chart-seq-1: oklch(0.850 0.140 165);
+  --chart-seq-2: oklch(0.720 0.160 163);
+  --chart-seq-3: oklch(0.600 0.150 163);
+  --chart-seq-4: oklch(0.508 0.118 165.6);
+  --chart-seq-5: oklch(0.400 0.090 167);
+
+  --chart-cat-1: oklch(0.700 0.170 160);
+  --chart-cat-2: oklch(0.680 0.170 245);
+  --chart-cat-3: oklch(0.680 0.210 25);
+  --chart-cat-4: oklch(0.750 0.160 85);
+  --chart-cat-5: oklch(0.680 0.190 280);
+  --chart-cat-6: oklch(0.680 0.150 195);
+  --chart-cat-7: oklch(0.700 0.180 330);
+  --chart-cat-8: oklch(0.720 0.140 130);
+}
+
+/* ============================================================================
+ * TAILWIND CSS V4 DIRECTIVES (@theme inline & utilities)
+ * Exposes all 4 layers to Tailwind v4 utility engine (bg-surface, text-income, etc.)
+ * ============================================================================ */
+
+@theme inline {
+  /* Foundation Shadcn Directives */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Layer 2 Theme Tokens */
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-overlay: var(--surface-overlay);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-disabled: var(--text-disabled);
+
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-focus-ring: var(--focus-ring);
+
+  /* Layer 3 Financial Semantics */
+  --color-income: var(--semantic-income-solid);
+  --color-income-bg: var(--semantic-income-bg);
+  --color-income-fg: var(--semantic-income-fg);
+  --color-income-border: var(--semantic-income-border);
+  --color-income-soft: var(--semantic-income-soft);
+
+  --color-expense: var(--semantic-expense-solid);
+  --color-expense-bg: var(--semantic-expense-bg);
+  --color-expense-fg: var(--semantic-expense-fg);
+  --color-expense-border: var(--semantic-expense-border);
+  --color-expense-soft: var(--semantic-expense-soft);
+
+  --color-investment: var(--semantic-investment-solid);
+  --color-investment-bg: var(--semantic-investment-bg);
+  --color-investment-fg: var(--semantic-investment-fg);
+  --color-investment-border: var(--semantic-investment-border);
+  --color-investment-soft: var(--semantic-investment-soft);
+
+  --color-savings: var(--semantic-savings-solid);
+  --color-savings-bg: var(--semantic-savings-bg);
+  --color-savings-fg: var(--semantic-savings-fg);
+  --color-savings-border: var(--semantic-savings-border);
+  --color-savings-soft: var(--semantic-savings-soft);
+
+  --color-bank: var(--semantic-bank-solid);
+  --color-bank-bg: var(--semantic-bank-bg);
+  --color-bank-fg: var(--semantic-bank-fg);
+  --color-bank-border: var(--semantic-bank-border);
+  --color-bank-soft: var(--semantic-bank-soft);
+
+  --color-stocks: var(--semantic-stocks-solid);
+  --color-stocks-bg: var(--semantic-stocks-bg);
+  --color-stocks-fg: var(--semantic-stocks-fg);
+  --color-stocks-border: var(--semantic-stocks-border);
+  --color-stocks-soft: var(--semantic-stocks-soft);
+
+  --color-wallet-bg: var(--semantic-wallet-bg);
+  --color-wallet-fg: var(--semantic-wallet-fg);
+  --color-wallet-border: var(--semantic-wallet-border);
+
+  /* Status Colors */
+  --color-status-success-bg: var(--status-success-bg);
+  --color-status-success-fg: var(--status-success-fg);
+  --color-status-warning-bg: var(--status-warning-bg);
+  --color-status-warning-fg: var(--status-warning-fg);
+  --color-status-error-bg: var(--status-error-bg);
+  --color-status-error-fg: var(--status-error-fg);
+  --color-status-info-bg: var(--status-info-bg);
+  --color-status-info-fg: var(--status-info-fg);
+
+  /* Extended Data Visualization Tokens */
+  --color-chart-seq-1: var(--chart-seq-1);
+  --color-chart-seq-2: var(--chart-seq-2);
+  --color-chart-seq-3: var(--chart-seq-3);
+  --color-chart-seq-4: var(--chart-seq-4);
+  --color-chart-seq-5: var(--chart-seq-5);
+
+  --color-chart-cat-1: var(--chart-cat-1);
+  --color-chart-cat-2: var(--chart-cat-2);
+  --color-chart-cat-3: var(--chart-cat-3);
+  --color-chart-cat-4: var(--chart-cat-4);
+  --color-chart-cat-5: var(--chart-cat-5);
+  --color-chart-cat-6: var(--chart-cat-6);
+  --color-chart-cat-7: var(--chart-cat-7);
+  --color-chart-cat-8: var(--chart-cat-8);
+
+  --color-chart-positive: var(--chart-positive);
+  --color-chart-negative: var(--chart-negative);
+  --color-chart-projected: var(--chart-projected);
+}
+
+/* Custom Financial Semantic Utility Directives */
+@utility badge-income {
+  background-color: var(--semantic-income-bg);
+  color: var(--semantic-income-fg);
+  border: 1px solid var(--semantic-income-border);
+}
+
+@utility badge-expense {
+  background-color: var(--semantic-expense-bg);
+  color: var(--semantic-expense-fg);
+  border: 1px solid var(--semantic-expense-border);
+}
+
+@utility badge-investment {
+  background-color: var(--semantic-investment-bg);
+  color: var(--semantic-investment-fg);
+  border: 1px solid var(--semantic-investment-border);
+}
+
+@utility badge-savings {
+  background-color: var(--semantic-savings-bg);
+  color: var(--semantic-savings-fg);
+  border: 1px solid var(--semantic-savings-border);
+}
+
+@utility badge-bank {
+  background-color: var(--semantic-bank-bg);
+  color: var(--semantic-bank-fg);
+  border: 1px solid var(--semantic-bank-border);
+}
+
+@utility badge-stocks {
+  background-color: var(--semantic-stocks-bg);
+  color: var(--semantic-stocks-fg);
+  border: 1px solid var(--semantic-stocks-border);
+}

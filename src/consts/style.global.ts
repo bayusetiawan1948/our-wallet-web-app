@@ -1,0 +1,1 @@
+export const PADDING_GLOBAL = `px-10 py-8 sm:px-8 sm:py-6 md:px-6 md:py-4`

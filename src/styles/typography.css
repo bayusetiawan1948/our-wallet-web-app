@@ -1,0 +1,387 @@
+/**
+ * ============================================================================
+ * Our Wallets — Enterprise Financial Typography System
+ * Architecture: Tailwind CSS v4 CSS-First (@theme inline, @utility, @layer)
+ * ============================================================================
+ *
+ * DESIGN PHILOSOPHY & PRINCIPLES:
+ * 1. Monospaced Technical Precision: Built on Geist Mono (Headings/Display) and
+ *    JetBrains Mono (Body/Data/Labels). Ensures strict alignment and readable data.
+ * 2. Financial Readability: tabular-nums & lining-nums enabled by default to
+ *    prevent horizontal layout shifting during real-time balance updates.
+ * 3. Enterprise Dashboard Aesthetics: Matches standard design quality found in
+ *    Linear, Vercel, Stripe Dashboard, Raycast, and GitHub.
+ * 4. High Accessibility (WCAG Compliant): Minimum 12px font size, comfortable
+ *    line height ratios (1.15 to 1.55), clear hierarchy, and theme agnostic contrast.
+ */
+
+/* ============================================================================
+ * 1. DESIGN TOKENS TIER (@theme inline)
+ * Defines the core atomic variables for font sizes, line heights, letter
+ * spacings, and font weights.
+ * ============================================================================ */
+
+@theme inline {
+  --font-mono: 'JetBrains Mono Variable', monospace;
+  --font-heading: 'Geist Mono Variable', monospace;
+
+  /* Scale Font Sizes (px -> rem mapping) */
+  --text-xs: 0.75rem;    /* 12px */
+  --text-sm: 0.875rem;   /* 14px */
+  --text-base: 1rem;     /* 16px */
+  --text-lg: 1.125rem;   /* 18px */
+  --text-xl: 1.25rem;    /* 20px */
+  --text-2xl: 1.5rem;    /* 24px */
+  --text-3xl: 1.875rem;  /* 30px */
+  --text-4xl: 2.25rem;   /* 36px */
+
+  /* Responsive Fluid Clamp Scales for Display & Hero Headlines */
+  --text-display-lg: clamp(2.25rem, 1.5rem + 2.5vw, 3rem);     /* 36px - 48px */
+  --text-display-md: clamp(1.875rem, 1.35rem + 1.75vw, 2.5rem); /* 30px - 40px */
+  --text-display-sm: clamp(1.5rem, 1.2rem + 1vw, 2rem);        /* 24px - 32px */
+  --text-heading-xl: clamp(1.5rem, 1.25rem + 0.8vw, 1.875rem);  /* 24px - 30px */
+  --text-heading-lg: clamp(1.25rem, 1.125rem + 0.4vw, 1.5rem);  /* 20px - 24px */
+
+  /* Line Heights (Leading Tokens) */
+  --leading-none: 1;
+  --leading-tight: 1.15;
+  --leading-snug: 1.25;
+  --leading-compact: 1.35;
+  --leading-normal: 1.4;
+  --leading-relaxed: 1.5;
+  --leading-loose: 1.55;
+
+  /* Letter Spacings (Tracking Tokens) */
+  --tracking-tighter: -0.035em;
+  --tracking-tight: -0.025em;
+  --tracking-snug: -0.015em;
+  --tracking-normal: 0em;
+  --tracking-wide: 0.01em;
+  --tracking-wider: 0.02em;
+  --tracking-widest: 0.05em;
+
+  /* Font Weight Tokens (Allowed: Regular 400, Medium 500, Semibold 600, Bold 700) */
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+}
+
+/* ============================================================================
+ * 2. SEMANTIC UTILITIES TIER (@utility)
+ * Pre-composed, semantic typography classes consuming token variables.
+ * Components MUST use these semantic utilities rather than hardcoding atomic classes.
+ * ============================================================================ */
+
+/* ----------------------------------------------------------------------------
+ * DISPLAY LEVEL
+ * Purpose: Hero numbers, grand total balances, key metrics, and dashboard KPIs.
+ * Font Family: Geist Mono (--font-heading)
+ * ---------------------------------------------------------------------------- */
+
+/* .display-lg — Hero balances, primary metric showcase */
+@utility display-lg {
+  font-family: var(--font-heading);
+  font-size: var(--text-display-lg);
+  font-weight: 700;
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tighter);
+}
+
+/* .display-md — Main account balance summaries, section total cards */
+@utility display-md {
+  font-family: var(--font-heading);
+  font-size: var(--text-display-md);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: var(--tracking-tight);
+}
+
+/* .display-sm — Wallet card balance figures, secondary KPI highlights */
+@utility display-sm {
+  font-family: var(--font-heading);
+  font-size: var(--text-display-sm);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+  letter-spacing: var(--tracking-tight);
+}
+
+/* ----------------------------------------------------------------------------
+ * HEADING LEVEL
+ * Purpose: Page titles, section headers, dialog titles, and panel headings.
+ * Font Family: Geist Mono (--font-heading)
+ * ---------------------------------------------------------------------------- */
+
+/* .heading-xl — H1 Primary page title (e.g., "Cashflow Overview") */
+@utility heading-xl {
+  font-family: var(--font-heading);
+  font-size: var(--text-heading-xl);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+  letter-spacing: var(--tracking-tight);
+}
+
+/* .heading-lg — H2 Section headers, major widget titles, drawer headers */
+@utility heading-lg {
+  font-family: var(--font-heading);
+  font-size: var(--text-heading-lg);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: var(--tracking-snug);
+}
+
+/* .heading-md — H3 Sub-section headers, card titles, modal titles (20px) */
+@utility heading-md {
+  font-family: var(--font-heading);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: var(--leading-compact);
+  letter-spacing: var(--tracking-snug);
+}
+
+/* .heading-sm — H4 Group headers, table section titles, alert headers (18px) */
+@utility heading-sm {
+  font-family: var(--font-heading);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: var(--leading-normal);
+  letter-spacing: -0.01em;
+}
+
+/* ----------------------------------------------------------------------------
+ * TITLE LEVEL
+ * Purpose: Component-level structural headers, table column headers, list group titles.
+ * Font Family: Geist Mono (--font-heading)
+ * ---------------------------------------------------------------------------- */
+
+/* .title-lg — Major table block title, prominent card subheaders (18px) */
+@utility title-lg {
+  font-family: var(--font-heading);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: var(--leading-normal);
+  letter-spacing: -0.01em;
+}
+
+/* .title-md — Form section labels, list item titles, dropdown headers (16px) */
+@utility title-md {
+  font-family: var(--font-heading);
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: var(--leading-normal);
+  letter-spacing: -0.005em;
+}
+
+/* .title-sm — Compact list titles, dense card subheaders, tab labels (14px) */
+@utility title-sm {
+  font-family: var(--font-heading);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: var(--tracking-normal);
+}
+
+/* ----------------------------------------------------------------------------
+ * BODY LEVEL
+ * Purpose: Content body copy, description text, paragraph text.
+ * Font Family: JetBrains Mono (--font-mono)
+ * ---------------------------------------------------------------------------- */
+
+/* .body-lg — Lead paragraphs, introductory copy, featured descriptions (18px) */
+@utility body-lg {
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  font-weight: 400;
+  line-height: var(--leading-loose);
+  letter-spacing: var(--tracking-normal);
+}
+
+/* .body-md — Standard body copy, modal description, general reading (16px) */
+@utility body-md {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: 400;
+  line-height: var(--leading-relaxed);
+  letter-spacing: var(--tracking-normal);
+}
+
+/* .body-sm — Compact body text, table cell text, secondary descriptions (14px) */
+@utility body-sm {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: var(--tracking-normal);
+}
+
+/* ----------------------------------------------------------------------------
+ * LABEL LEVEL
+ * Purpose: Form labels, button text, table headers, badge indicators.
+ * Font Family: JetBrains Mono (--font-mono)
+ * ---------------------------------------------------------------------------- */
+
+/* .label-lg — Form input labels, primary button text, tab items (14px) */
+@utility label-lg {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: var(--leading-normal);
+  letter-spacing: var(--tracking-wide);
+}
+
+/* .label-md — Compact field labels, badge text, table head items (12px) */
+@utility label-md {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: var(--leading-normal);
+  letter-spacing: 0.015em;
+}
+
+/* .label-sm — Micro badge text, uppercase status labels, category tags (12px) */
+@utility label-sm {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: var(--leading-compact);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+}
+
+/* ----------------------------------------------------------------------------
+ * CAPTION LEVEL
+ * Purpose: Helper text below form inputs, timestamps, transaction metadata.
+ * Font Family: JetBrains Mono (--font-mono)
+ * ---------------------------------------------------------------------------- */
+
+/* .caption-md — Input helper text, popover footer notes (14px) */
+@utility caption-md {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: var(--leading-normal);
+  letter-spacing: var(--tracking-normal);
+}
+
+/* .caption-sm — Timestamps, transaction hashes, footnote disclosures (12px) */
+@utility caption-sm {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  line-height: var(--leading-normal);
+  letter-spacing: var(--tracking-wide);
+}
+
+/* ----------------------------------------------------------------------------
+ * CODE LEVEL
+ * Purpose: Monospaced technical parameters, formula expressions, raw data.
+ * Font Family: JetBrains Mono (--font-mono)
+ * ---------------------------------------------------------------------------- */
+
+/* .code-md — Code blocks, API endpoints, formula inputs (14px) */
+@utility code-md {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+}
+
+/* .code-sm — Inline technical chips, transaction IDs, Git hashes (12px) */
+@utility code-sm {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  line-height: var(--leading-normal);
+  letter-spacing: var(--tracking-normal);
+}
+
+/* ============================================================================
+ * 3. FINANCIAL NUMERIC UTILITIES TIER (@utility)
+ * Modern OpenType font-variant-numeric controls for precision financial UI.
+ * ============================================================================ */
+
+/* .num-tabular — Fixed-width digits for vertical alignment in financial tables */
+@utility num-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* .num-lining — Equal-height digits sitting flush on baseline */
+@utility num-lining {
+  font-variant-numeric: lining-nums;
+}
+
+/* .num-financial — Combined tabular and lining numbers (Optimal for Finance) */
+@utility num-financial {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* .num-proportional — Variable width digits for proportional body text */
+@utility num-proportional {
+  font-variant-numeric: proportional-nums;
+}
+
+/* .num-oldstyle — Lowercase style digits for historical reports */
+@utility num-oldstyle {
+  font-variant-numeric: oldstyle-nums;
+}
+
+/* ============================================================================
+ * 4. USAGE EXAMPLES & COMPONENT DESIGN GUIDE
+ * ============================================================================
+ *
+ * Example 1: Financial Balance Card Header & Total
+ * <div class="p-6 rounded-lg bg-card border border-border">
+ *   <span class="label-md text-muted-foreground uppercase">Total Net Worth</span>
+ *   <div class="display-md text-foreground num-financial">Rp 250.450.000,00</div>
+ *   <p class="caption-sm text-muted-foreground mt-1">Updated 2 mins ago</p>
+ * </div>
+ *
+ * Example 2: Financial Data Table Cell
+ * <td class="body-sm text-right text-foreground num-financial">
+ *   +Rp 1.500.000
+ * </td>
+ *
+ * Example 3: Form Input with Label and Caption
+ * <div>
+ *   <label class="label-lg text-foreground mb-1 block">Account Name</label>
+ *   <input class="body-md bg-background border border-input rounded-md px-3 py-2" />
+ *   <span class="caption-md text-muted-foreground mt-1 block">Enter your wallet nickname</span>
+ * </div>
+ *
+ * Example 4: Code / Transaction ID Tag
+ * <span class="code-sm bg-muted text-muted-foreground px-2 py-0.5 rounded">
+ *   tx_9841a0e7f
+ * </span>
+ *
+ * ============================================================================
+ * 5. TOKEN & SEMANTIC LEVEL RATIONALE
+ * ============================================================================
+ *
+ * - Why Display vs. Heading?
+ *   Headings structure document hierarchy (H1-H4) for screen readers and SEO.
+ *   Display styles are purely visual showcases for grand metrics & financial totals.
+ *
+ * - Why Title vs. Label?
+ *   Titles carry structural weight for content sub-blocks (cards, tables, lists).
+ *   Labels target interactive controls (inputs, buttons, badges) where weight and
+ *   tracking are optimized for quick recognition.
+ *
+ * - Why Mono Fonts for Body & Headings?
+ *   Our Wallets is designed for finance professionals and precision tracking.
+ *   Monospaced fonts eliminate digit misalignment across changing values and give
+ *   an enterprise dashboard aesthetic similar to Vercel, Linear, and Stripe.
+ *
+ * ============================================================================
+ * 6. EXTENSION BEST PRACTICES
+ * ============================================================================
+ *
+ * 1. NEVER hardcode text size or font weight in components (e.g. avoid `text-xl font-bold`).
+ *    Always use semantic utility classes (`heading-md`, `title-sm`, etc.).
+ * 2. If a new UI pattern requires a size variation, create a new semantic utility
+ *    in this file consuming existing design tokens.
+ * 3. Always apply `.num-financial` or `.num-tabular` to elements rendering numbers,
+ *    currencies, percentages, or balance amounts.
+ * 4. Keep minimum font size at 12px (`xs`) to maintain WCAG AAA visual accessibility.
+ * ============================================================================
+ */
