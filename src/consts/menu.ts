@@ -1,10 +1,12 @@
 import {
-  ChartLineUpIcon, // dashboard
-  ArrowsDownUpIcon, // Cashflow
-  WalletIcon, // Invesment
-  HandshakeIcon, // Debts & Receivables
-  GaugeIcon, // Wallet
-  type Icon
+  GaugeIcon, // Dashboard
+  ArrowsDownUpIcon, // Transaksi & Transfer
+  WalletIcon, // Dompet & Rekonsiliasi
+  HandshakeIcon, // Utang & Piutang
+  ChartLineUpIcon, // Investasi
+  TargetIcon, // Budgets / Anggaran
+  UsersThreeIcon, // Household & Anggota
+  type Icon,
 } from "@phosphor-icons/react";
 import { ROUTES } from "./routes";
 
@@ -12,39 +14,43 @@ export type MenuItem = {
   title: string;
   url: string;
   icon: Icon;
-  items: MenuItem[];
+  items?: MenuItem[];
 };
 
 export const dataMenu: MenuItem[] = [
   {
-    title: 'Dashboard',
+    title: "Dashboard",
     url: ROUTES.DASHBOARD,
     icon: GaugeIcon,
-    items: [],
   },
   {
-    title: 'Cashflow',
-    url: ROUTES.CASHFLOW,
+    title: "Transaksi & Transfer",
+    url: ROUTES.TRANSACTIONS,
     icon: ArrowsDownUpIcon,
-    items: [],
   },
   {
-    title: 'Wallet',
-    url: ROUTES.WALLET,
+    title: "Dompet & Rekonsiliasi",
+    url: ROUTES.WALLETS,
     icon: WalletIcon,
-    items: [],
   },
   {
-    title: 'Investment',
-    url: ROUTES.INVESTMENT,
-    icon: ChartLineUpIcon,
-    items: [],
-  },
-  {
-    title: 'Debts & Receivables',
-    url: ROUTES.DEBTS_RECEIVABLES,
+    title: "Utang & Piutang",
+    url: ROUTES.DEBTS,
     icon: HandshakeIcon,
-    items: [],
+  },
+  {
+    title: "Investasi Portofolio",
+    url: ROUTES.INVESTMENTS,
+    icon: ChartLineUpIcon,
+  },
+  {
+    title: "Anggaran / Budgets",
+    url: ROUTES.BUDGETS,
+    icon: TargetIcon,
+  },
+  {
+    title: "Household & Akses",
+    url: ROUTES.HOUSEHOLD,
+    icon: UsersThreeIcon,
   },
 ];
-  

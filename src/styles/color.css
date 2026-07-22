@@ -631,6 +631,91 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 
+  /* Layer 1 Primitive Colors */
+  --color-primitive-slate-50: var(--color-primitive-slate-50);
+  --color-primitive-slate-100: var(--color-primitive-slate-100);
+  --color-primitive-slate-200: var(--color-primitive-slate-200);
+  --color-primitive-slate-300: var(--color-primitive-slate-300);
+  --color-primitive-slate-400: var(--color-primitive-slate-400);
+  --color-primitive-slate-500: var(--color-primitive-slate-500);
+  --color-primitive-slate-600: var(--color-primitive-slate-600);
+  --color-primitive-slate-700: var(--color-primitive-slate-700);
+  --color-primitive-slate-800: var(--color-primitive-slate-800);
+  --color-primitive-slate-900: var(--color-primitive-slate-900);
+  --color-primitive-slate-950: var(--color-primitive-slate-950);
+
+  --color-primitive-emerald-50: var(--color-primitive-emerald-50);
+  --color-primitive-emerald-100: var(--color-primitive-emerald-100);
+  --color-primitive-emerald-200: var(--color-primitive-emerald-200);
+  --color-primitive-emerald-300: var(--color-primitive-emerald-300);
+  --color-primitive-emerald-400: var(--color-primitive-emerald-400);
+  --color-primitive-emerald-500: var(--color-primitive-emerald-500);
+  --color-primitive-emerald-600: var(--color-primitive-emerald-600);
+  --color-primitive-emerald-700: var(--color-primitive-emerald-700);
+  --color-primitive-emerald-800: var(--color-primitive-emerald-800);
+  --color-primitive-emerald-900: var(--color-primitive-emerald-900);
+  --color-primitive-emerald-950: var(--color-primitive-emerald-950);
+
+  --color-primitive-rose-50: var(--color-primitive-rose-50);
+  --color-primitive-rose-100: var(--color-primitive-rose-100);
+  --color-primitive-rose-200: var(--color-primitive-rose-200);
+  --color-primitive-rose-300: var(--color-primitive-rose-300);
+  --color-primitive-rose-400: var(--color-primitive-rose-400);
+  --color-primitive-rose-500: var(--color-primitive-rose-500);
+  --color-primitive-rose-600: var(--color-primitive-rose-600);
+  --color-primitive-rose-700: var(--color-primitive-rose-700);
+  --color-primitive-rose-800: var(--color-primitive-rose-800);
+  --color-primitive-rose-900: var(--color-primitive-rose-900);
+  --color-primitive-rose-950: var(--color-primitive-rose-950);
+
+  --color-primitive-amber-50: var(--color-primitive-amber-50);
+  --color-primitive-amber-100: var(--color-primitive-amber-100);
+  --color-primitive-amber-200: var(--color-primitive-amber-200);
+  --color-primitive-amber-300: var(--color-primitive-amber-300);
+  --color-primitive-amber-400: var(--color-primitive-amber-400);
+  --color-primitive-amber-500: var(--color-primitive-amber-500);
+  --color-primitive-amber-600: var(--color-primitive-amber-600);
+  --color-primitive-amber-700: var(--color-primitive-amber-700);
+  --color-primitive-amber-800: var(--color-primitive-amber-800);
+  --color-primitive-amber-900: var(--color-primitive-amber-900);
+  --color-primitive-amber-950: var(--color-primitive-amber-950);
+
+  --color-primitive-sky-50: var(--color-primitive-sky-50);
+  --color-primitive-sky-100: var(--color-primitive-sky-100);
+  --color-primitive-sky-200: var(--color-primitive-sky-200);
+  --color-primitive-sky-300: var(--color-primitive-sky-300);
+  --color-primitive-sky-400: var(--color-primitive-sky-400);
+  --color-primitive-sky-500: var(--color-primitive-sky-500);
+  --color-primitive-sky-600: var(--color-primitive-sky-600);
+  --color-primitive-sky-700: var(--color-primitive-sky-700);
+  --color-primitive-sky-800: var(--color-primitive-sky-800);
+  --color-primitive-sky-900: var(--color-primitive-sky-900);
+  --color-primitive-sky-950: var(--color-primitive-sky-950);
+
+  --color-primitive-indigo-50: var(--color-primitive-indigo-50);
+  --color-primitive-indigo-100: var(--color-primitive-indigo-100);
+  --color-primitive-indigo-200: var(--color-primitive-indigo-200);
+  --color-primitive-indigo-300: var(--color-primitive-indigo-300);
+  --color-primitive-indigo-400: var(--color-primitive-indigo-400);
+  --color-primitive-indigo-500: var(--color-primitive-indigo-500);
+  --color-primitive-indigo-600: var(--color-primitive-indigo-600);
+  --color-primitive-indigo-700: var(--color-primitive-indigo-700);
+  --color-primitive-indigo-800: var(--color-primitive-indigo-800);
+  --color-primitive-indigo-900: var(--color-primitive-indigo-900);
+  --color-primitive-indigo-950: var(--color-primitive-indigo-950);
+
+  --color-primitive-cyan-50: var(--color-primitive-cyan-50);
+  --color-primitive-cyan-100: var(--color-primitive-cyan-100);
+  --color-primitive-cyan-200: var(--color-primitive-cyan-200);
+  --color-primitive-cyan-300: var(--color-primitive-cyan-300);
+  --color-primitive-cyan-400: var(--color-primitive-cyan-400);
+  --color-primitive-cyan-500: var(--color-primitive-cyan-500);
+  --color-primitive-cyan-600: var(--color-primitive-cyan-600);
+  --color-primitive-cyan-700: var(--color-primitive-cyan-700);
+  --color-primitive-cyan-800: var(--color-primitive-cyan-800);
+  --color-primitive-cyan-900: var(--color-primitive-cyan-900);
+  --color-primitive-cyan-950: var(--color-primitive-cyan-950);
+
   /* Layer 2 Theme Tokens */
   --color-surface: var(--surface);
   --color-surface-hover: var(--surface-hover);

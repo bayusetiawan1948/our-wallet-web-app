@@ -29,7 +29,7 @@ export function AppHeader() {
   const middleItems = isOverflow ? items.slice(1, items.length - 1) : [];
 
   return (
-    <header className="flex h-16 shrink-0 items-center gap-2 border-b border-border/40 px-4">
+    <header className="flex h-16 shrink-0 items-center gap-2 border-b border-border/40 px-4 bg-background/95 backdrop-blur-sm sticky top-0 z-30">
       <div className="flex items-center gap-2">
         <SidebarTrigger className="-ml-1" />
         <Separator
@@ -55,7 +55,6 @@ export function AppHeader() {
               ))
             ) : (
               <>
-                {/* First item */}
                 {firstItem && (
                   <BreadcrumbItem>
                     <BreadcrumbLink asChild>
@@ -66,24 +65,16 @@ export function AppHeader() {
 
                 <BreadcrumbSeparator />
 
-                {/* Dropdown Menu for middle overflow items */}
                 <BreadcrumbItem>
                   <DropdownMenu>
-                    <DropdownMenuTrigger
-                      className="flex items-center gap-1 rounded-md p-1 hover:bg-accent focus:outline-hidden cursor-pointer"
-                      aria-label="Show collapsed breadcrumb items"
-                    >
-                      <BreadcrumbEllipsis />
-                      <span className="sr-only">Toggle breadcrumb menu</span>
+                    <DropdownMenuTrigger className="flex items-center gap-1">
+                      <BreadcrumbEllipsis className="h-4 w-4" />
+                      <span className="sr-only">Toggle menu</span>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
-                      {middleItems.map((mid) => (
-                        <DropdownMenuItem
-                          key={mid.url}
-                          asChild
-                          className="cursor-pointer"
-                        >
-                          <Link to={mid.url}>{mid.title}</Link>
+                      {middleItems.map((item) => (
+                        <DropdownMenuItem key={item.url} asChild>
+                          <Link to={item.url}>{item.title}</Link>
                         </DropdownMenuItem>
                       ))}
                     </DropdownMenuContent>
@@ -92,7 +83,6 @@ export function AppHeader() {
 
                 <BreadcrumbSeparator />
 
-                {/* Last item (Current page) */}
                 {lastItem && (
                   <BreadcrumbItem>
                     <BreadcrumbPage>{lastItem.title}</BreadcrumbPage>

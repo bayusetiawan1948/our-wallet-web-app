@@ -1,7 +1,9 @@
 export const ROUTES = {
   DASHBOARD: "/",
-  WALLET: "/wallets",
-  CASHFLOW: "/cashflow",
-  INVESTMENT: "/investments",
-  DEBTS_RECEIVABLES: "/debts-receivables",
-} as const
+  TRANSACTIONS: "/transactions",
+  WALLETS: "/wallets",
+  DEBTS: "/debts",
+  INVESTMENTS: "/investments",
+  BUDGETS: "/budgets",
+  HOUSEHOLD: "/household",
+} as const;

@@ -1,36 +1,34 @@
 import { useState } from "react";
-import { formatCompactNumber } from "@/libs/utils";
-import { PADDING_GLOBAL } from "@/consts/style.global";
-import { Button } from "@/components/ui/button";
-import { Marquee } from "@/components/ui/marquee";
+import type { DateRange } from "react-day-picker";
+import { useMockStore } from "@/lib/mock-store";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuCheckboxItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
-import { CaretDownIcon } from "@phosphor-icons/react";
-
-const CURRENCIES = [
-  { value: "IDR", label: "IDR (Rp)" },
-  { value: "USD", label: "USD ($)" },
-  { value: "JPY", label: "JPY (¥)" },
-];
-
-const DUMMY_WALLETS = [
-  { id: "main", name: "MAIN WALLET" },
-  { id: "savings", name: "SAVINGS WALLET" },
-  { id: "investment", name: "INVESTMENT WALLET" },
-  { id: "emergency", name: "EMERGENCY FUND" },
-];
+  InvestmentMarquee,
+  CurrencySelector,
+  DateFilterPopover,
+  WalletSelector,
+  CardDashboard,
+  NetWorthTrendCard,
+  WalletSplitCard,
+  PerformanceChartCard,
+  CategoryAllocationCard,
+  type DatePresetKey,
+  type DashboardSummaryCard,
+} from "@/components/feature/dashboard";
+import { Badge } from "@/components/ui/badge";
+import { ShieldCheckIcon, UserIcon, WalletIcon, MoneyIcon, CreditCardIcon, ChartLineUpIcon } from "@phosphor-icons/react";
 
 export default function Page() {
+  const store = useMockStore();
+  const isAdmin = store.activeRole === "admin";
+  const activeUser = store.getActiveUser();
+  const accessibleWallets = store.getAccessibleWallets();
+
   const [currency, setCurrency] = useState<string>("IDR");
-  const [selectedWalletIds, setSelectedWalletIds] = useState<string[]>(["main"]);
+  const [selectedWalletIds, setSelectedWalletIds] = useState<string[]>(
+    accessibleWallets.map((w) => w.id)
+  );
+  const [datePreset, setDatePreset] = useState<DatePresetKey>("30d");
+  const [customRange, setCustomRange] = useState<DateRange | undefined>(undefined);
 
   const toggleWallet = (id: string) => {
     setSelectedWalletIds((prev) => {
@@ -43,79 +41,130 @@ export default function Page() {
     });
   };
 
-  const getWalletDisplayLabel = () => {
-    if (selectedWalletIds.length === 0) return "Select Wallet";
+  // Dynamic calculations based on active role & store
+  const totalWalletBalance = accessibleWallets.reduce((sum, w) => sum + w.balance, 0);
 
-    const firstSelected = DUMMY_WALLETS.find((w) => selectedWalletIds.includes(w.id));
-    const firstName = firstSelected ? firstSelected.name : "MAIN WALLET";
+  // Portfolio value
+  let totalInvestmentValue = 0;
+  store.investments.forEach((inv) => {
+    const activeTxs = store.investmentTransactions.filter(
+      (itx) => itx.investment_id === inv.id && itx.status === "active"
+    );
+    let qty = 0;
+    activeTxs.forEach((tx) => (qty += tx.type === "buy" ? tx.quantity : -tx.quantity));
 
-    if (selectedWalletIds.length === 1) {
-      return firstName;
+    const val = store.valuations.find((v) => v.investment_id === inv.id);
+    if (val) totalInvestmentValue += qty * val.price_per_unit;
+  });
+
+  const totalAssets = totalWalletBalance + (isAdmin ? totalInvestmentValue : totalInvestmentValue * 0.4);
+
+  // Debts
+  let totalLiabilities = 0;
+  store.debts.forEach((debt) => {
+    if (debt.type === "utang" && debt.status !== "lunas") {
+      const paid = store.debtPayments
+        .filter((p) => p.debt_id === debt.id && p.status === "active")
+        .reduce((sum, p) => sum + p.amount, 0);
+
+      const remaining = debt.principal - paid;
+      if (isAdmin) {
+        totalLiabilities += remaining;
+      } else {
+        totalLiabilities += Math.round(remaining * (debt.portion_member / debt.principal));
+      }
     }
+  });
 
-    const extraCount = selectedWalletIds.length - 1;
-    return `${firstName} +${extraCount}`;
-  };
+  const netWorth = totalAssets - totalLiabilities;
+
+  const dynamicSummaryCards: DashboardSummaryCard[] = [
+    {
+      id: "net-worth",
+      title: "NET WORTH",
+      value: `Rp ${netWorth.toLocaleString("id-ID")}`,
+      trend: "+12.4% vs month",
+      isPositive: true,
+      icon: WalletIcon,
+    },
+    {
+      id: "total-assets",
+      title: "TOTAL ASSETS",
+      value: `Rp ${totalAssets.toLocaleString("id-ID")}`,
+      trend: "+8.2% vs month",
+      isPositive: true,
+      icon: MoneyIcon,
+    },
+    {
+      id: "liabilities",
+      title: "LIABILITIES",
+      value: `Rp ${totalLiabilities.toLocaleString("id-ID")}`,
+      trend: "-4.5% vs month",
+      isPositive: true,
+      icon: CreditCardIcon,
+    },
+    {
+      id: "savings-rate",
+      title: "SAVINGS RATE",
+      value: "42.5%",
+      trend: "+1.5% vs month",
+      isPositive: true,
+      icon: ChartLineUpIcon,
+    },
+  ];
 
   return (
-    <div className='flex flex-1 flex-col min-w-0 w-full py-8 sm:px-8 sm:py-6 gap-4'>
-      <div className='px-10 sm:p-0'>
-        <h1 className="body-md">Dashboard</h1>
-        <p className="caption-sm">Real-time financial status tracking</p>
-      </div>
-      <div className="flex flex-col gap-8 min-w-0 w-full sm:flex-row sm:gap-1">
-        <div className="relative flex w-full max-w-full min-w-0 border-2 border-primary overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_5%,black_95%,transparent)]">
-          <Marquee pauseOnHover className="caption-sm num-financial py-1" repeat={4}>
-            <p>{`BCA ${formatCompactNumber(10000000)}`}</p>
-            <p>{`NIAGA ${formatCompactNumber(10000000)}`}</p>
-            <p>{`BNI ${formatCompactNumber(112334432)}`}</p>
-            <p>{`BMRI ${formatCompactNumber(10000000)}`}</p>
-          </Marquee>
+    <div className="flex w-full flex-1 flex-col gap-4 py-8 sm:px-8 sm:py-6">
+      {/* Dynamic Role Banner */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-6 sm:p-0">
+        <div className="flex flex-col items-start gap-2 mb-1">
+          <h1 className="body-lg sm:heading-md md:heading-xl">Financial Dashboard</h1>
+          <p className="caption-sm">
+            {isAdmin
+              ? "Menampilkan keseluruhan saldo wallet, investasi, dan net worth seluruh keluarga."
+              : "Menampilkan saldo wallet terotorisasi & bagian porsi aset milik Anda."}
+          </p>
         </div>
-        <div className="flex items-center justify-end gap-3">
-          {/* Currency Selector Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1.5 font-medium">
-                <span>{currency}</span>
-                <CaretDownIcon className="size-3.5 text-muted-foreground" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-36">
-              <DropdownMenuLabel>Mata Uang</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuRadioGroup value={currency} onValueChange={setCurrency}>
-                {CURRENCIES.map((item) => (
-                  <DropdownMenuRadioItem key={item.value} value={item.value}>
-                    {item.label}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        <div className="flex items-center flex-wrap gap-3 sm:flex-nowrap sm:w-auto">
+          <CurrencySelector value={currency} onChange={setCurrency} />
+          <DateFilterPopover
+            datePreset={datePreset}
+            onDatePresetChange={setDatePreset}
+            customRange={customRange}
+            onCustomRangeChange={setCustomRange}
+          />
+          <WalletSelector
+            selectedWalletIds={selectedWalletIds}
+            onToggleWallet={toggleWallet}
+          />
+        </div>
+      </div>
 
-          {/* Wallet Selector Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1.5 font-medium">
-                <span>{getWalletDisplayLabel()}</span>
-                <CaretDownIcon className="size-3.5 text-muted-foreground" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuLabel>Pilih Wallet</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {DUMMY_WALLETS.map((wallet) => (
-                <DropdownMenuCheckboxItem
-                  key={wallet.id}
-                  checked={selectedWalletIds.includes(wallet.id)}
-                  onCheckedChange={() => toggleWallet(wallet.id)}
-                >
-                  {wallet.name}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+      <div className="w-full min-w-0">
+        <InvestmentMarquee />
+      </div>
+
+      <div className="px-6 sm:p-0 w-full min-w-0 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {dynamicSummaryCards.map((card) => (
+          <CardDashboard key={card.id} card={card} />
+        ))}
+      </div>
+
+      <div className="px-6 sm:p-0 w-full min-w-0 grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="xl:col-span-2">
+          <NetWorthTrendCard />
+        </div>
+        <div className="xl:col-span-1">
+          <WalletSplitCard />
+        </div>
+      </div>
+
+      <div className="px-6 sm:p-0 w-full min-w-0 grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="xl:col-span-2">
+          <PerformanceChartCard />
+        </div>
+        <div className="xl:col-span-1">
+          <CategoryAllocationCard />
         </div>
       </div>
     </div>
