@@ -10,6 +10,11 @@ import {
   XCircleIcon,
   ListDashesIcon,
   InfoIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+  LockKeyIcon,
+  ArrowLeftIcon,
+  WarningIcon,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +28,23 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -36,6 +58,9 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Link } from "react-router-dom";
+import { ROUTES } from "@/consts/routes";
+import type { UserRole } from "@/types";
 
 export default function HouseholdPage() {
   const store = useMockStore();
@@ -48,6 +73,16 @@ export default function HouseholdPage() {
   const [memberEmail, setMemberEmail] = useState("");
   const [canEditOthers, setCanEditOthers] = useState(false);
 
+  // Edit Member State
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editRole, setEditRole] = useState<UserRole>("member");
+  const [editCanEditOthers, setEditCanEditOthers] = useState(false);
+
+  // Delete Member State
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+
   const handleAddMember = (e: React.FormEvent) => {
     e.preventDefault();
     if (!memberName || !memberEmail) return;
@@ -57,6 +92,71 @@ export default function HouseholdPage() {
     setCanEditOthers(false);
     setIsAddOpen(false);
   };
+
+  const openEditModal = (userId: string) => {
+    const user = store.users.find((u) => u.id === userId);
+    const member = store.members.find((m) => m.user_id === userId);
+    if (user && member) {
+      setEditingUserId(userId);
+      setEditName(user.name);
+      setEditEmail(user.email);
+      setEditRole(member.role);
+      setEditCanEditOthers(member.can_edit_others_transactions);
+    }
+  };
+
+  const handleUpdateMember = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUserId || !editName || !editEmail) return;
+    store.updateMember(editingUserId, {
+      name: editName,
+      email: editEmail,
+      role: editRole,
+      canEditOthers: editCanEditOthers,
+    });
+    setEditingUserId(null);
+  };
+
+  const handleDeleteMember = () => {
+    if (!deletingUserId) return;
+    store.deleteMember(deletingUserId);
+    setDeletingUserId(null);
+  };
+
+  // If Member role accesses directly, show Access Denied UI
+  if (!isAdmin) {
+    return (
+      <div className="py-12 px-6 max-w-2xl mx-auto space-y-6 text-center">
+        <Card className="border-border/60 p-8 shadow-sm">
+          <CardHeader className="items-center pb-2">
+            <div className="size-16 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mb-2">
+              <LockKeyIcon className="size-8" />
+            </div>
+            <CardTitle className="text-2xl font-bold">Akses Dibatasi Khusus Admin</CardTitle>
+            <CardDescription className="text-sm max-w-md pt-2">
+              Halaman <strong>Household & Akses</strong> hanya dapat diakses oleh Kepala Keluarga / Admin. Akun Anda saat ini terdaftar sebagai <strong>Member / Pasangan</strong>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-6 space-y-4">
+            <div className="bg-muted/50 p-4 rounded-xl border border-border/40 text-xs text-muted-foreground text-left space-y-1">
+              <p className="font-semibold text-foreground flex items-center gap-1.5">
+                <InfoIcon className="size-4 text-blue-500 shrink-0" />
+                Catatan Hak Akses Member:
+              </p>
+              <p>• Member dapat mencatat transaksi, melihat laporan terisolasi, dan mentransfer antar dompet.</p>
+              <p>• Manajemen anggota, pengesetan izin, dan pembagian dompet dikelola sepenuhnya oleh Admin.</p>
+            </div>
+            <Button asChild className="gap-2 mt-4">
+              <Link to={ROUTES.DASHBOARD}>
+                <ArrowLeftIcon className="size-4" />
+                Kembali ke Dashboard
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="py-8 px-6 sm:px-8 sm:py-6 space-y-6">
@@ -72,72 +172,65 @@ export default function HouseholdPage() {
           </p>
         </div>
 
-        {isAdmin ? (
-          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <UserPlusIcon className="size-4" />
-                Tambah Anggota / Pasangan
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-              <form onSubmit={handleAddMember}>
-                <DialogHeader>
-                  <DialogTitle>Tambah Member Baru</DialogTitle>
-                  <DialogDescription>
-                    Buatkan akun untuk pasangan atau anggota keluarga lain untuk mengelola dana terisolasi.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="name">Nama Lengkap</Label>
-                    <Input
-                      id="name"
-                      placeholder="Contoh: Annisa Permata"
-                      value={memberName}
-                      onChange={(e) => setMemberName(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="annisa@family.com"
-                      value={memberEmail}
-                      onChange={(e) => setMemberEmail(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="flex items-center justify-between space-x-2 pt-2 border-t">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="edit-permission" className="text-sm font-medium">
-                        Izin Edit Transaksi Anggota Lain
-                      </Label>
-                      <p className="text-xs text-muted-foreground">
-                        Izinkan member ini mengedit/void transaksi milik anggota keluarga lain.
-                      </p>
-                    </div>
-                    <Switch
-                      id="edit-permission"
-                      checked={canEditOthers}
-                      onCheckedChange={setCanEditOthers}
-                    />
-                  </div>
+        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+          <DialogTrigger asChild>
+            <Button className="gap-2">
+              <UserPlusIcon className="size-4" />
+              Tambah Anggota / Pasangan
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px]">
+            <form onSubmit={handleAddMember}>
+              <DialogHeader>
+                <DialogTitle>Tambah Member Baru</DialogTitle>
+                <DialogDescription>
+                  Buatkan akun untuk pasangan atau anggota keluarga lain untuk mengelola dana terisolasi.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="name">Nama Lengkap</Label>
+                  <Input
+                    id="name"
+                    placeholder="Contoh: Annisa Permata"
+                    value={memberName}
+                    onChange={(e) => setMemberName(e.target.value)}
+                    required
+                  />
                 </div>
-                <DialogFooter>
-                  <Button type="submit">Simpan Member</Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-        ) : (
-          <div className="flex items-center gap-2 text-xs bg-muted/60 text-muted-foreground px-3 py-2 rounded-lg border border-border/40">
-            <InfoIcon className="size-4 text-blue-500 shrink-0" />
-            <span>Hanya Kepala Keluarga (Admin) yang dapat menambah anggota dan mengeset hak akses dompet.</span>
-          </div>
-        )}
+                <div className="grid gap-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="annisa@family.com"
+                    value={memberEmail}
+                    onChange={(e) => setMemberEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="flex items-center justify-between space-x-2 pt-2 border-t">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="edit-permission" className="text-sm font-medium">
+                      Izin Edit Transaksi Anggota Lain
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Izinkan member ini mengedit/void transaksi milik anggota keluarga lain.
+                    </p>
+                  </div>
+                  <Switch
+                    id="edit-permission"
+                    checked={canEditOthers}
+                    onCheckedChange={setCanEditOthers}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="submit">Simpan Member</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Tabs defaultValue="members" className="w-full">
@@ -160,6 +253,7 @@ export default function HouseholdPage() {
               if (!user) return null;
 
               const isMemberAdmin = member.role === "admin";
+              const isSelf = user.id === activeUser.id;
               const userWallets = store.wallets.filter((w) => {
                 if (isMemberAdmin) return true;
                 return (
@@ -177,7 +271,7 @@ export default function HouseholdPage() {
                     <div>
                       <CardTitle className="flex items-center gap-2 text-lg">
                         {user.name}
-                        {user.id === activeUser.id && (
+                        {isSelf && (
                           <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
                             Anda
                           </Badge>
@@ -185,17 +279,43 @@ export default function HouseholdPage() {
                       </CardTitle>
                       <CardDescription>{user.email}</CardDescription>
                     </div>
-                    <Badge variant={isMemberAdmin ? "default" : "secondary"} className="gap-1">
-                      {isMemberAdmin ? (
-                        <>
-                          <ShieldCheckIcon className="size-3.5 text-emerald-400" /> Admin / Kepala Keluarga
-                        </>
-                      ) : (
-                        <>
-                          <UserIcon className="size-3.5 text-blue-400" /> Member / Pasangan
-                        </>
-                      )}
-                    </Badge>
+
+                    <div className="flex flex-col items-end gap-2">
+                      <Badge variant={isMemberAdmin ? "default" : "secondary"} className="gap-1">
+                        {isMemberAdmin ? (
+                          <>
+                            <ShieldCheckIcon className="size-3.5 text-emerald-400" /> Admin / Kepala Keluarga
+                          </>
+                        ) : (
+                          <>
+                            <UserIcon className="size-3.5 text-blue-400" /> Member / Pasangan
+                          </>
+                        )}
+                      </Badge>
+
+                      {/* Action Buttons for Admin */}
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="size-7 text-muted-foreground hover:text-foreground"
+                          title="Edit Member"
+                          onClick={() => openEditModal(member.user_id)}
+                        >
+                          <PencilSimpleIcon className="size-3.5" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="size-7 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                          title={isSelf ? "Tidak dapat menghapus akun sendiri" : "Hapus Member"}
+                          disabled={isSelf}
+                          onClick={() => setDeletingUserId(member.user_id)}
+                        >
+                          <TrashIcon className="size-3.5" />
+                        </Button>
+                      </div>
+                    </div>
                   </CardHeader>
 
                   <CardContent className="space-y-4 pt-2">
@@ -226,7 +346,7 @@ export default function HouseholdPage() {
                         <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                           Dompet yang Dapat Diakses ({userWallets.length})
                         </Label>
-                        {isAdmin && !isMemberAdmin && (
+                        {!isMemberAdmin && (
                           <Dialog>
                             <DialogTrigger asChild>
                               <Button
@@ -352,6 +472,108 @@ export default function HouseholdPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Edit Member Modal */}
+      <Dialog open={editingUserId !== null} onOpenChange={(open) => !open && setEditingUserId(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <form onSubmit={handleUpdateMember}>
+            <DialogHeader>
+              <DialogTitle>Edit Data Member</DialogTitle>
+              <DialogDescription>
+                Perbarui informasi profil, peran (Role), dan hak akses transaksi anggota keluarga.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-name">Nama Lengkap</Label>
+                <Input
+                  id="edit-name"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-email">Email</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-role">Peran (Role)</Label>
+                <Select value={editRole} onValueChange={(val: UserRole) => setEditRole(val)}>
+                  <SelectTrigger id="edit-role">
+                    <SelectValue placeholder="Pilih Role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Admin / Kepala Keluarga</SelectItem>
+                    <SelectItem value="member">Member / Pasangan</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center justify-between space-x-2 pt-2 border-t">
+                <div className="space-y-0.5">
+                  <Label htmlFor="edit-permission-switch" className="text-sm font-medium">
+                    Izin Edit Transaksi Anggota Lain
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Izinkan member ini mengedit/void transaksi milik anggota keluarga lain.
+                  </p>
+                </div>
+                <Switch
+                  id="edit-permission-switch"
+                  checked={editCanEditOthers}
+                  onCheckedChange={setEditCanEditOthers}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditingUserId(null)}>
+                Batal
+              </Button>
+              <Button type="submit">Simpan Perubahan</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Member Confirmation Alert Dialog */}
+      <AlertDialog open={deletingUserId !== null} onOpenChange={(open) => !open && setDeletingUserId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className="flex items-center gap-2 text-destructive mb-1">
+              <WarningIcon className="size-5 shrink-0" />
+              <AlertDialogTitle>Konfirmasi Hapus Member</AlertDialogTitle>
+            </div>
+            <AlertDialogDescription className="space-y-2 text-sm">
+              <p>
+                Apakah Anda yakin ingin mengeluarkan{" "}
+                <strong className="text-foreground">
+                  {store.users.find((u) => u.id === deletingUserId)?.name}
+                </strong>{" "}
+                dari Household?
+              </p>
+              <div className="p-3 bg-muted/60 rounded-lg text-xs border border-border/50 text-muted-foreground space-y-1">
+                <p className="font-semibold text-foreground">• Akses dompet akan dicabut seketika.</p>
+                <p>• Data histori transaksi dan saldo wallet milik member ini akan tetap aman tersimpan di sistem.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeletingUserId(null)}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteMember}
+            >
+              Ya, Hapus Member
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

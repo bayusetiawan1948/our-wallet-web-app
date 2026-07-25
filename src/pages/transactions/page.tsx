@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useMockStore } from "@/lib/mock-store";
 import {
   ArrowsDownUpIcon,
@@ -9,7 +9,10 @@ import {
   ProhibitIcon,
   ReceiptIcon,
   SwapIcon,
+  TagIcon,
 } from "@phosphor-icons/react";
+import { CategoryManagement } from "@/components/categories/category-management";
+import { ImportTransactionsDialog } from "@/components/transactions/import-transactions-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -49,10 +52,9 @@ export default function TransactionsPage() {
 
   // New Transaction Form State
   const [isTxOpen, setIsTxOpen] = useState(false);
-  const [txType, setTxType] = useState<"income" | "expense">("expense");
+  const [txType, setTxType] = useState<"income" | "expense" | "transfer">("expense");
   const [txWalletId, setTxWalletId] = useState<string>(accessibleWallets[0]?.id || "");
-  const [txCategoryId, setTxCategoryId] = useState<string>(store.categories[0]?.id || "");
-  const [txOwnerId, setTxOwnerId] = useState<string>(activeUser.id);
+  const [txCategoryId, setTxCategoryId] = useState<string>("");
   const [txAmount, setTxAmount] = useState<string>("");
   const [txDate, setTxDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [txNote, setTxNote] = useState<string>("");
@@ -67,6 +69,23 @@ export default function TransactionsPage() {
   const [trFee, setTrFee] = useState<string>("0");
   const [trDate, setTrDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [trNote, setTrNote] = useState<string>("");
+
+  const availableCategories = useMemo(() => {
+    return store.categories.filter(
+      (c) => c.is_active && (c.type === "both" || c.type === txType)
+    );
+  }, [store.categories, txType]);
+
+  // Default txCategoryId to first available category [0]
+  useEffect(() => {
+    if (availableCategories.length > 0) {
+      if (!txCategoryId || !availableCategories.some((c) => c.id === txCategoryId)) {
+        setTxCategoryId(availableCategories[0].id);
+      }
+    } else {
+      setTxCategoryId("");
+    }
+  }, [availableCategories, txCategoryId]);
 
   // Live Warning calculations
   const numTxAmount = parseFloat(txAmount) || 0;
@@ -92,8 +111,8 @@ export default function TransactionsPage() {
     const success = store.addTransaction({
       wallet_id: txWalletId,
       category_id: txCategoryId,
-      owner_id: txOwnerId,
-      type: txType,
+      owner_id: activeUser.id,
+      type: txType as "income" | "expense",
       amount: numTxAmount,
       date: txDate,
       note: txNote,
@@ -142,259 +161,266 @@ export default function TransactionsPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Add Transaction Dialog */}
+        <div className="flex flex-wrap items-center gap-3">
+          <ImportTransactionsDialog />
+          {/* Unified Transaction & Transfer Dialog */}
           <Dialog open={isTxOpen} onOpenChange={setIsTxOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2">
+              <Button className="gap-2 shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground font-medium">
                 <PlusIcon className="size-4" />
-                Tambah Transaksi
+                Catat Transaksi / Transfer
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <form onSubmit={handleCreateTransaction}>
-                <DialogHeader>
-                  <DialogTitle>Catat Transaksi Baru</DialogTitle>
-                  <DialogDescription>
-                    Pilih tipe transaksi, wallet, dan alokasi pemilik dana.
-                  </DialogDescription>
-                </DialogHeader>
+            <DialogContent className="sm:max-w-[520px]">
+              <DialogHeader>
+                <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                  <ArrowsDownUpIcon className="size-5 text-primary" />
+                  Catat Transaksi / Transfer
+                </DialogTitle>
+                <DialogDescription>
+                  Pilih jenis transaksi untuk mencatat pengeluaran, pemasukan, atau mutasi dana antar dompet.
+                </DialogDescription>
+              </DialogHeader>
 
-                <div className="grid gap-4 py-4">
-                  {/* Warnings */}
-                  {isBalanceShort && (
-                    <Alert variant="destructive" className="py-2">
-                      <WarningIcon className="size-4" />
-                      <AlertTitle className="text-xs font-bold">Saldo Tidak Cukup</AlertTitle>
-                      <AlertDescription className="text-xs">
-                        Saldo dompet {selectedWallet?.name} hanya Rp {selectedWallet?.balance.toLocaleString("id-ID")}.
-                      </AlertDescription>
-                    </Alert>
-                  )}
+              {/* Mode Switcher Tabs */}
+              <Tabs
+                value={txType}
+                onValueChange={(val) => {
+                  setTxType(val as "income" | "expense" | "transfer");
+                }}
+                className="w-full mt-2"
+              >
+                <TabsList className="grid w-full grid-cols-3 bg-muted/60 p-1 rounded-lg">
+                  <TabsTrigger
+                    value="expense"
+                    className="data-[state=active]:bg-background data-[state=active]:text-rose-600 data-[state=active]:shadow-xs gap-1.5 text-xs font-semibold"
+                  >
+                    <ArrowUpRightIcon className="size-3.5 text-rose-500" />
+                    Pengeluaran
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="income"
+                    className="data-[state=active]:bg-background data-[state=active]:text-emerald-600 data-[state=active]:shadow-xs gap-1.5 text-xs font-semibold"
+                  >
+                    <ArrowDownLeftIcon className="size-3.5 text-emerald-500" />
+                    Pemasukan
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="transfer"
+                    className="data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-xs gap-1.5 text-xs font-semibold"
+                  >
+                    <SwapIcon className="size-3.5 text-primary" />
+                    Transfer Dana
+                  </TabsTrigger>
+                </TabsList>
 
-                  {isOverbudget && (
-                    <Alert className="border-amber-500/50 text-amber-600 bg-amber-500/10 py-2">
-                      <WarningIcon className="size-4 text-amber-600" />
-                      <AlertTitle className="text-xs font-bold">Peringatan Overbudget</AlertTitle>
-                      <AlertDescription className="text-xs">
-                        Kategori {selectedCategory?.name} akan melebihi budget Rp {categoryBudget?.target_amount.toLocaleString("id-ID")}.
-                      </AlertDescription>
-                    </Alert>
-                  )}
+                {/* Form Pengeluaran / Pemasukan */}
+                {txType !== ("transfer" as any) ? (
+                  <form onSubmit={handleCreateTransaction} className="space-y-4 pt-4">
+                    {/* Warnings */}
+                    {isBalanceShort && (
+                      <Alert variant="destructive" className="py-2.5 bg-destructive/10 border-destructive/20 text-destructive">
+                        <WarningIcon className="size-4 mt-0.5" />
+                        <div>
+                          <AlertTitle className="text-xs font-bold">Saldo Tidak Cukup</AlertTitle>
+                          <AlertDescription className="text-xs">
+                            Saldo dompet <strong>{selectedWallet?.name}</strong> hanya Rp {selectedWallet?.balance.toLocaleString("id-ID")}.
+                          </AlertDescription>
+                        </div>
+                      </Alert>
+                    )}
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label>Tipe Transaksi</Label>
-                      <Select value={txType} onValueChange={(val: "income" | "expense") => setTxType(val)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="expense">Pengeluaran (Expense)</SelectItem>
-                          <SelectItem value="income">Pemasukan (Income)</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    {isOverbudget && (
+                      <Alert className="border-amber-500/30 text-amber-700 dark:text-amber-400 bg-amber-500/10 py-2.5">
+                        <WarningIcon className="size-4 text-amber-600 mt-0.5" />
+                        <div>
+                          <AlertTitle className="text-xs font-bold">Peringatan Overbudget</AlertTitle>
+                          <AlertDescription className="text-xs">
+                            Kategori <strong>{selectedCategory?.name}</strong> akan melebihi budget Rp {categoryBudget?.target_amount.toLocaleString("id-ID")}.
+                          </AlertDescription>
+                        </div>
+                      </Alert>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="grid gap-1.5">
+                        <Label className="text-xs font-medium">Pilih Wallet</Label>
+                        <Select value={txWalletId} onValueChange={setTxWalletId}>
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Pilih wallet" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {accessibleWallets.map((w) => (
+                              <SelectItem key={w.id} value={w.id}>
+                                {w.name} (Rp {w.balance.toLocaleString("id-ID")})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="grid gap-1.5">
+                        <Label className="text-xs font-medium">Kategori</Label>
+                        <Select value={txCategoryId} onValueChange={setTxCategoryId}>
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Pilih kategori" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableCategories.map((c) => (
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
 
-                    <div className="grid gap-2">
-                      <Label>Pemilik Uang (Owner)</Label>
-                      <Select value={txOwnerId} onValueChange={setTxOwnerId}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {store.users.map((u) => (
-                            <SelectItem key={u.id} value={u.id}>
-                              {u.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="grid gap-1.5">
+                        <Label className="text-xs font-medium">Jumlah Nominal (Rp)</Label>
+                        <Input
+                          type="number"
+                          placeholder="Contoh: 150000"
+                          className="h-9"
+                          value={txAmount}
+                          onChange={(e) => setTxAmount(e.target.value)}
+                          required
+                        />
+                      </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label>Pilih Wallet</Label>
-                      <Select value={txWalletId} onValueChange={setTxWalletId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Pilih wallet" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {accessibleWallets.map((w) => (
-                            <SelectItem key={w.id} value={w.id}>
-                              {w.name} (Rp {w.balance.toLocaleString("id-ID")})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="grid gap-1.5">
+                        <Label className="text-xs font-medium">Tanggal</Label>
+                        <Input
+                          type="date"
+                          className="h-9"
+                          value={txDate}
+                          onChange={(e) => setTxDate(e.target.value)}
+                          required
+                        />
+                      </div>
                     </div>
 
-                    <div className="grid gap-2">
-                      <Label>Kategori</Label>
-                      <Select value={txCategoryId} onValueChange={setTxCategoryId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Pilih kategori" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {store.categories.map((c) => (
-                            <SelectItem key={c.id} value={c.id}>
-                              {c.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label>Jumlah Nominal (Rp)</Label>
+                    <div className="grid gap-1.5">
+                      <Label className="text-xs font-medium">Catatan / Keterangan</Label>
                       <Input
-                        type="number"
-                        placeholder="Contoh: 150000"
-                        value={txAmount}
-                        onChange={(e) => setTxAmount(e.target.value)}
-                        required
+                        placeholder="Makan siang bersama tim / Belanja bulanan..."
+                        className="h-9"
+                        value={txNote}
+                        onChange={(e) => setTxNote(e.target.value)}
                       />
                     </div>
 
-                    <div className="grid gap-2">
-                      <Label>Tanggal</Label>
+                    <DialogFooter className="pt-2">
+                      <Button type="button" variant="ghost" onClick={() => setIsTxOpen(false)}>
+                        Batal
+                      </Button>
+                      <Button type="submit" disabled={isBalanceShort} className="gap-1.5">
+                        Simpan Transaksi
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                ) : (
+                  /* Form Transfer Dana */
+                  <form onSubmit={handleCreateTransfer} className="space-y-4 pt-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="grid gap-1.5">
+                        <Label className="text-xs font-medium">Wallet Asal (Sumber)</Label>
+                        <Select value={trFromWalletId} onValueChange={setTrFromWalletId}>
+                          <SelectTrigger className="h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {accessibleWallets.map((w) => (
+                              <SelectItem key={w.id} value={w.id}>
+                                {w.name} (Rp {w.balance.toLocaleString("id-ID")})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="grid gap-1.5">
+                        <Label className="text-xs font-medium">Wallet Tujuan</Label>
+                        <Select value={trToWalletId} onValueChange={setTrToWalletId}>
+                          <SelectTrigger className="h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {store.wallets.map((w) => (
+                              <SelectItem key={w.id} value={w.id}>
+                                {w.name} ({w.owner_user_id ? "Personal" : "Bersama"})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="grid gap-1.5">
+                        <Label className="text-xs font-medium">Jumlah Nominal (Rp)</Label>
+                        <Input
+                          type="number"
+                          placeholder="1000000"
+                          className="h-9"
+                          value={trAmount}
+                          onChange={(e) => setTrAmount(e.target.value)}
+                          required
+                        />
+                      </div>
+
+                      <div className="grid gap-1.5">
+                        <Label className="text-xs font-medium">Biaya Transfer (Rp)</Label>
+                        <Input
+                          type="number"
+                          placeholder="0"
+                          className="h-9"
+                          value={trFee}
+                          onChange={(e) => setTrFee(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid gap-1.5">
+                      <Label className="text-xs font-medium">Tanggal</Label>
                       <Input
                         type="date"
-                        value={txDate}
-                        onChange={(e) => setTxDate(e.target.value)}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label>Catatan / Keterangan</Label>
-                    <Input
-                      placeholder="Makan siang bersama tim / Belanja bulanan..."
-                      value={txNote}
-                      onChange={(e) => setTxNote(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <DialogFooter>
-                  <Button type="submit" disabled={isBalanceShort}>
-                    Simpan Transaksi
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-
-          {/* Add Transfer Dialog */}
-          <Dialog open={isTransferOpen} onOpenChange={setIsTransferOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="gap-2">
-                <SwapIcon className="size-4" />
-                Transfer Dana
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[450px]">
-              <form onSubmit={handleCreateTransfer}>
-                <DialogHeader>
-                  <DialogTitle>Transfer Antar Wallet</DialogTitle>
-                  <DialogDescription>
-                    Pindah dana antar dompet (Wallet Asal member terisolasi, Wallet Tujuan bebas di household).
-                  </DialogDescription>
-                </DialogHeader>
-
-                <div className="grid gap-4 py-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label>Wallet Asal (Sumber)</Label>
-                      <Select value={trFromWalletId} onValueChange={setTrFromWalletId}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {accessibleWallets.map((w) => (
-                            <SelectItem key={w.id} value={w.id}>
-                              {w.name} (Rp {w.balance.toLocaleString("id-ID")})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="grid gap-2">
-                      <Label>Wallet Tujuan</Label>
-                      <Select value={trToWalletId} onValueChange={setTrToWalletId}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {store.wallets.map((w) => (
-                            <SelectItem key={w.id} value={w.id}>
-                              {w.name} ({w.owner_user_id ? "Personal" : "Bersama"})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label>Jumlah Nominal (Rp)</Label>
-                      <Input
-                        type="number"
-                        placeholder="1000000"
-                        value={trAmount}
-                        onChange={(e) => setTrAmount(e.target.value)}
+                        className="h-9"
+                        value={trDate}
+                        onChange={(e) => setTrDate(e.target.value)}
                         required
                       />
                     </div>
 
-                    <div className="grid gap-2">
-                      <Label>Biaya Transfer (Rp)</Label>
+                    <div className="grid gap-1.5">
+                      <Label className="text-xs font-medium">Catatan / Keterangan</Label>
                       <Input
-                        type="number"
-                        placeholder="0"
-                        value={trFee}
-                        onChange={(e) => setTrFee(e.target.value)}
+                        placeholder="Top up Kantong Jago / Transfer uang jajan..."
+                        className="h-9"
+                        value={trNote}
+                        onChange={(e) => setTrNote(e.target.value)}
                       />
                     </div>
-                  </div>
 
-                  <div className="grid gap-2">
-                    <Label>Tanggal</Label>
-                    <Input
-                      type="date"
-                      value={trDate}
-                      onChange={(e) => setTrDate(e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label>Catatan</Label>
-                    <Input
-                      placeholder="Top up Kantong Jago / Uang jajan..."
-                      value={trNote}
-                      onChange={(e) => setTrNote(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <DialogFooter>
-                  <Button type="submit">Eksekusi Transfer</Button>
-                </DialogFooter>
-              </form>
+                    <DialogFooter className="pt-2">
+                      <Button type="button" variant="ghost" onClick={() => setIsTxOpen(false)}>
+                        Batal
+                      </Button>
+                      <Button type="submit" className="gap-1.5">
+                        Eksekusi Transfer
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                )}
+              </Tabs>
             </DialogContent>
           </Dialog>
         </div>
       </div>
 
       <Tabs defaultValue="transactions" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-md">
+        <TabsList className="grid w-full grid-cols-3 max-w-xl">
           <TabsTrigger value="transactions" className="gap-2">
             <ReceiptIcon className="size-4" />
             Riwayat Transaksi ({filteredTransactions.length})
@@ -402,6 +428,10 @@ export default function TransactionsPage() {
           <TabsTrigger value="transfers" className="gap-2">
             <SwapIcon className="size-4" />
             Transfer Dana ({store.transfers.length})
+          </TabsTrigger>
+          <TabsTrigger value="categories" className="gap-2">
+            <TagIcon className="size-4" />
+            Kategori Transaksi ({store.categories.length})
           </TabsTrigger>
         </TabsList>
 
@@ -573,6 +603,11 @@ export default function TransactionsPage() {
               </Table>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Tab 3: Category Management */}
+        <TabsContent value="categories" className="pt-4">
+          <CategoryManagement />
         </TabsContent>
       </Tabs>
     </div>

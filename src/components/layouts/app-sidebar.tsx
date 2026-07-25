@@ -19,17 +19,21 @@ import { CommandIcon } from "@phosphor-icons/react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { dataMenu } from "@/consts/menu";
 import { ROUTES } from "@/consts/routes";
+import { useMockStore } from "@/lib/mock-store";
 
-const data = {
-  user: {
-    name: "Bayu Setiawan",
-    email: "bayu@example.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
-};
+
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const store = useMockStore();
+  const activeUser = store.getActiveUser();
   const { setOpenMobile, isMobile } = useSidebar();
+
+  const menuItems = React.useMemo(() => {
+    if (store.activeRole !== "admin") {
+      return dataMenu.filter((item) => item.url !== ROUTES.HOUSEHOLD);
+    }
+    return dataMenu;
+  }, [store.activeRole]);
 
   const handleLogoClick = () => {
     if (isMobile) {
@@ -60,10 +64,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={dataMenu} />
+        <NavMain items={menuItems} />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser
+          user={{
+            name: activeUser.name,
+            email: activeUser.email,
+            avatar: store.activeRole === "admin" ? "/avatars/shadcn.jpg" : "/avatars/annisa.jpg",
+          }}
+        />
       </SidebarFooter>
     </Sidebar>
   );

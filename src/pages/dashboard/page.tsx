@@ -14,13 +14,11 @@ import {
   type DatePresetKey,
   type DashboardSummaryCard,
 } from "@/components/feature/dashboard";
-import { Badge } from "@/components/ui/badge";
-import { ShieldCheckIcon, UserIcon, WalletIcon, MoneyIcon, CreditCardIcon, ChartLineUpIcon } from "@phosphor-icons/react";
+import { WalletIcon, MoneyIcon, CreditCardIcon, ChartLineUpIcon } from "@phosphor-icons/react";
 
 export default function Page() {
   const store = useMockStore();
   const isAdmin = store.activeRole === "admin";
-  const activeUser = store.getActiveUser();
   const accessibleWallets = store.getAccessibleWallets();
 
   const [currency, setCurrency] = useState<string>("IDR");

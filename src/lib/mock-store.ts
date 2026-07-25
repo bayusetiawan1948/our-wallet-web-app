@@ -6,9 +6,11 @@ import type {
   Household,
   HouseholdMember,
   Wallet,
+  WalletType,
   WalletAccess,
   WalletReconciliation,
   Category,
+  CategoryType,
   Transaction,
   Transfer,
   Debt,
@@ -50,14 +52,14 @@ const INITIAL_WALLET_ACCESS: WalletAccess[] = [
 ];
 
 const INITIAL_CATEGORIES: Category[] = [
-  { id: "cat-1", household_id: "household-1", name: "Gaji & Bonus", is_system: true, is_hidden: false, icon: "Money" },
-  { id: "cat-2", household_id: "household-1", name: "Side Hustle", is_system: false, is_hidden: false, icon: "Briefcase" },
-  { id: "cat-3", household_id: "household-1", name: "Makanan & Resto", is_system: true, is_hidden: false, icon: "ForkKnife" },
-  { id: "cat-4", household_id: "household-1", name: "Tagihan & Utilitas", is_system: true, is_hidden: false, icon: "Receipt" },
-  { id: "cat-5", household_id: "household-1", name: "Belanja Bulanan", is_system: false, is_hidden: false, icon: "ShoppingCart" },
-  { id: "cat-6", household_id: "household-1", name: "Transportasi & Bensin", is_system: true, is_hidden: false, icon: "Car" },
-  { id: "cat-7", household_id: "household-1", name: "Hiburan", is_system: false, is_hidden: false, icon: "Film" },
-  { id: "cat-8", household_id: "household-1", name: "Kesehatan", is_system: false, is_hidden: false, icon: "FirstAid" },
+  { id: "cat-1", household_id: "household-1", name: "Gaji & Bonus", type: "income", is_system: true, is_active: true, icon: "Money" },
+  { id: "cat-2", household_id: "household-1", name: "Side Hustle", type: "income", is_system: false, is_active: true, icon: "Briefcase" },
+  { id: "cat-3", household_id: "household-1", name: "Makanan & Resto", type: "expense", is_system: true, is_active: true, icon: "ForkKnife" },
+  { id: "cat-4", household_id: "household-1", name: "Tagihan & Utilitas", type: "expense", is_system: true, is_active: true, icon: "Receipt" },
+  { id: "cat-5", household_id: "household-1", name: "Belanja Bulanan", type: "expense", is_system: false, is_active: true, icon: "ShoppingCart" },
+  { id: "cat-6", household_id: "household-1", name: "Transportasi & Bensin", type: "expense", is_system: true, is_active: true, icon: "Car" },
+  { id: "cat-7", household_id: "household-1", name: "Hiburan", type: "expense", is_system: false, is_active: true, icon: "Film" },
+  { id: "cat-8", household_id: "household-1", name: "Kesehatan", type: "both", is_system: false, is_active: true, icon: "FirstAid" },
 ];
 
 const INITIAL_TRANSACTIONS: Transaction[] = [
@@ -262,6 +264,196 @@ class Store {
       (w) => w.owner_user_id === memberId || allowedWalletIds.has(w.id)
     );
   }
+
+  hasWalletTrackRecord(walletId: string): { hasRecord: boolean; details: string[] } {
+    const details: string[] = [];
+
+    const txCount = this.transactions.filter((t) => t.wallet_id === walletId).length;
+    if (txCount > 0) details.push(`${txCount} Transaksi`);
+
+    const transferCount = this.transfers.filter(
+      (tr) => tr.from_wallet_id === walletId || tr.to_wallet_id === walletId
+    ).length;
+    if (transferCount > 0) details.push(`${transferCount} Transfer`);
+
+    const debtCount = this.debtPayments.filter((dp) => dp.wallet_id === walletId).length;
+    if (debtCount > 0) details.push(`${debtCount} Pembayaran Utang/Piutang`);
+
+    const invCount = this.investmentTransactions.filter((itx) => itx.wallet_id === walletId).length;
+    if (invCount > 0) details.push(`${invCount} Transaksi Investasi`);
+
+    const recCount = this.reconciliations.filter((r) => r.wallet_id === walletId).length;
+    if (recCount > 0) details.push(`${recCount} Rekonsiliasi Saldo`);
+
+    return {
+      hasRecord: details.length > 0,
+      details,
+    };
+  }
+
+  addWallet(data: {
+    name: string;
+    type: WalletType;
+    currency?: string;
+    initialBalance: number;
+    ownerType: "user" | "household";
+    ownerUserId?: string;
+  }) {
+    if (this.activeRole !== "admin") {
+      toast.error("Hanya Admin yang dapat membuat dompet baru!");
+      return false;
+    }
+
+    const newId = `w-${Date.now()}`;
+    const activeUser = this.getActiveUser();
+    const ownerUserId = data.ownerType === "user" ? (data.ownerUserId || activeUser.id) : undefined;
+    const ownerHouseholdId = data.ownerType === "household" ? "household-1" : undefined;
+
+    const newWallet: Wallet = {
+      id: newId,
+      name: data.name,
+      type: data.type,
+      currency: data.currency || "IDR",
+      balance: data.initialBalance || 0,
+      owner_user_id: ownerUserId,
+      owner_household_id: ownerHouseholdId,
+    };
+
+    this.wallets = [...this.wallets, newWallet];
+
+    // Jika dompet Kantong Bersama, otomatis beri akses ke semua member
+    if (data.ownerType === "household") {
+      this.users.forEach((u) => {
+        this.walletAccess.push({
+          wallet_id: newId,
+          user_id: u.id,
+          assigned_by: activeUser.id,
+        });
+      });
+    }
+
+    // Catat Saldo Awal sebagai transaksi pemasukan sistem jika > 0
+    if (data.initialBalance > 0) {
+      const systemCategory = this.categories.find((c) => c.name.includes("Gaji") || c.is_system) || this.categories[0];
+      const initTx: Transaction = {
+        id: `tx-${Date.now()}`,
+        wallet_id: newId,
+        category_id: systemCategory?.id || "cat-1",
+        owner_id: ownerUserId || activeUser.id,
+        recorded_by: activeUser.id,
+        type: "income",
+        amount: data.initialBalance,
+        date: new Date().toISOString().split("T")[0],
+        note: `Saldo Awal ${data.name}`,
+        status: "active",
+      };
+      this.transactions = [initTx, ...this.transactions];
+    }
+
+    this.logAudit(
+      "CREATE_WALLET",
+      "WALLETS",
+      newId,
+      `Membuat dompet baru: ${data.name} (${data.type}) dengan saldo awal Rp ${(data.initialBalance || 0).toLocaleString("id-ID")}`
+    );
+    toast.success(`Dompet "${data.name}" berhasil dibuat!`);
+    emitChange();
+    return true;
+  }
+
+  updateWallet(
+    walletId: string,
+    data: {
+      name: string;
+      type: WalletType;
+      ownerType?: "user" | "household";
+      ownerUserId?: string;
+    }
+  ) {
+    const wallet = this.wallets.find((w) => w.id === walletId);
+    if (!wallet) {
+      toast.error("Dompet tidak ditemukan!");
+      return false;
+    }
+
+    const activeUser = this.getActiveUser();
+    // Member hanya boleh mengedit dompet miliknya sendiri
+    if (this.activeRole !== "admin" && wallet.owner_user_id !== activeUser.id) {
+      toast.error("Member hanya dapat mengubah dompet miliknya sendiri!");
+      return false;
+    }
+
+    const beforeData = { ...wallet };
+
+    let ownerUserId = wallet.owner_user_id;
+    let ownerHouseholdId = wallet.owner_household_id;
+
+    if (this.activeRole === "admin" && data.ownerType) {
+      ownerUserId = data.ownerType === "user" ? (data.ownerUserId || activeUser.id) : undefined;
+      ownerHouseholdId = data.ownerType === "household" ? "household-1" : undefined;
+    }
+
+    this.wallets = this.wallets.map((w) => {
+      if (w.id === walletId) {
+        return {
+          ...w,
+          name: data.name,
+          type: data.type,
+          owner_user_id: ownerUserId,
+          owner_household_id: ownerHouseholdId,
+        };
+      }
+      return w;
+    });
+
+    this.logAudit(
+      "UPDATE_WALLET",
+      "WALLETS",
+      walletId,
+      `Mengubah informasi dompet "${beforeData.name}" menjadi "${data.name}"`,
+      beforeData,
+      { name: data.name, type: data.type }
+    );
+    toast.success(`Dompet "${data.name}" berhasil diperbarui!`);
+    emitChange();
+    return true;
+  }
+
+  deleteWallet(walletId: string) {
+    const wallet = this.wallets.find((w) => w.id === walletId);
+    if (!wallet) {
+      toast.error("Dompet tidak ditemukan!");
+      return false;
+    }
+
+    if (this.activeRole !== "admin") {
+      toast.error("Hanya Admin yang dapat menghapus dompet!");
+      return false;
+    }
+
+    const trackCheck = this.hasWalletTrackRecord(walletId);
+    if (trackCheck.hasRecord) {
+      toast.error("⚠️ TIDAK DAPAT MENGHAPUS DOMPET!", {
+        description: `Dompet "${wallet.name}" memiliki riwayat: ${trackCheck.details.join(", ")}.`,
+        duration: 5000,
+      });
+      return false;
+    }
+
+    this.wallets = this.wallets.filter((w) => w.id !== walletId);
+    this.walletAccess = this.walletAccess.filter((wa) => wa.wallet_id !== walletId);
+
+    this.logAudit(
+      "DELETE_WALLET",
+      "WALLETS",
+      walletId,
+      `Menghapus dompet "${wallet.name}"`
+    );
+    toast.success(`Dompet "${wallet.name}" berhasil dihapus!`);
+    emitChange();
+    return true;
+  }
+
 
   logAudit(action: string, entity_type: string, entity_id: string, details: string, before?: Record<string, unknown>, after?: Record<string, unknown>) {
     const activeUser = this.getActiveUser();
@@ -528,6 +720,52 @@ class Store {
     emitChange();
   }
 
+  updateMember(userId: string, data: { name: string; email: string; role: UserRole; canEditOthers: boolean }) {
+    this.users = this.users.map((u) =>
+      u.id === userId ? { ...u, name: data.name, email: data.email } : u
+    );
+
+    this.members = this.members.map((m) =>
+      m.user_id === userId
+        ? { ...m, role: data.role, can_edit_others_transactions: data.canEditOthers }
+        : m
+    );
+
+    this.logAudit(
+      "UPDATE_MEMBER",
+      "HOUSEHOLD_MEMBERS",
+      userId,
+      `Memperbarui data member ${data.name} (${data.email}), Role: ${data.role}`
+    );
+    toast.success(`Data member ${data.name} berhasil diperbarui!`);
+    emitChange();
+  }
+
+  deleteMember(userId: string) {
+    const activeUser = this.getActiveUser();
+    if (activeUser.id === userId) {
+      toast.error("Anda tidak dapat menghapus akun Anda sendiri.");
+      return false;
+    }
+
+    const targetUser = this.users.find((u) => u.id === userId);
+    const targetName = targetUser ? targetUser.name : userId;
+
+    this.members = this.members.filter((m) => m.user_id !== userId);
+    this.walletAccess = this.walletAccess.filter((wa) => wa.user_id !== userId);
+
+    this.logAudit(
+      "DELETE_MEMBER",
+      "HOUSEHOLD_MEMBERS",
+      userId,
+      `Menghapus member ${targetName} dari Household dan mencabut seluruh akses dompet.`
+    );
+    toast.success(`Member ${targetName} telah dihapus dari Household.`);
+    emitChange();
+    return true;
+  }
+
+
   toggleWalletAccess(walletId: string, userId: string) {
     const exists = this.walletAccess.some(
       (wa) => wa.wallet_id === walletId && wa.user_id === userId
@@ -613,7 +851,153 @@ class Store {
     emitChange();
     return true;
   }
+
+  // Category CRUD Operations
+  hasCategoryTrackRecord(categoryId: string): { hasRecord: boolean; details: string[] } {
+    const details: string[] = [];
+
+    const txCount = this.transactions.filter((t) => t.category_id === categoryId).length;
+    if (txCount > 0) details.push(`${txCount} Transaksi`);
+
+    const budgetCount = this.budgets.filter((b) => b.category_id === categoryId).length;
+    if (budgetCount > 0) details.push(`${budgetCount} Anggaran / Budget`);
+
+    return {
+      hasRecord: details.length > 0,
+      details,
+    };
+  }
+
+  addCategory(data: { name: string; type: CategoryType; icon?: string }) {
+    if (this.activeRole !== "admin") {
+      toast.error("Hanya Admin yang dapat membuat kategori!");
+      return false;
+    }
+
+    if (!data.name.trim()) {
+      toast.error("Nama kategori tidak boleh kosong!");
+      return false;
+    }
+
+    const newCategory: Category = {
+      id: `cat-${Date.now()}`,
+      household_id: "household-1",
+      name: data.name.trim(),
+      type: data.type,
+      is_system: false,
+      is_active: true,
+      icon: data.icon || "Tag",
+    };
+
+    this.categories = [...this.categories, newCategory];
+    this.logAudit("CREATE_CATEGORY", "CATEGORIES", newCategory.id, `Menambahkan kategori "${newCategory.name}" (${data.type})`);
+    toast.success(`Kategori "${newCategory.name}" berhasil dibuat!`);
+    emitChange();
+    return true;
+  }
+
+  updateCategory(id: string, data: { name: string; type: CategoryType; icon?: string; is_active?: boolean }) {
+    if (this.activeRole !== "admin") {
+      toast.error("Hanya Admin yang dapat mengedit kategori!");
+      return false;
+    }
+
+    const category = this.categories.find((c) => c.id === id);
+    if (!category) {
+      toast.error("Kategori tidak ditemukan!");
+      return false;
+    }
+
+    if (!data.name.trim()) {
+      toast.error("Nama kategori tidak boleh kosong!");
+      return false;
+    }
+
+    const updatedCategories = this.categories.map((c) => {
+      if (c.id === id) {
+        return {
+          ...c,
+          name: data.name.trim(),
+          type: data.type,
+          icon: data.icon || c.icon,
+          is_active: c.is_system ? true : (data.is_active !== undefined ? data.is_active : c.is_active),
+        };
+      }
+      return c;
+    });
+
+    this.categories = updatedCategories;
+    this.logAudit("UPDATE_CATEGORY", "CATEGORIES", id, `Mengedit kategori "${data.name}"`);
+    toast.success(`Kategori "${data.name}" berhasil diperbarui!`);
+    emitChange();
+    return true;
+  }
+
+  toggleCategoryStatus(id: string) {
+    if (this.activeRole !== "admin") {
+      toast.error("Hanya Admin yang dapat mengubah status kategori!");
+      return false;
+    }
+
+    const category = this.categories.find((c) => c.id === id);
+    if (!category) return false;
+
+    if (category.is_system) {
+      toast.error("Kategori bawaan sistem tidak dapat dinonaktifkan!");
+      return false;
+    }
+
+    const nextStatus = !category.is_active;
+    this.categories = this.categories.map((c) =>
+      c.id === id ? { ...c, is_active: nextStatus } : c
+    );
+
+    this.logAudit(
+      "TOGGLE_CATEGORY_STATUS",
+      "CATEGORIES",
+      id,
+      `Mengubah status kategori "${category.name}" menjadi ${nextStatus ? "Aktif" : "Non-aktif"}`
+    );
+    toast.info(`Kategori "${category.name}" sekarang ${nextStatus ? "Aktif" : "Non-aktif"}`);
+    emitChange();
+    return true;
+  }
+
+  deleteCategory(id: string) {
+    if (this.activeRole !== "admin") {
+      toast.error("Hanya Admin yang dapat menghapus kategori!");
+      return false;
+    }
+
+    const category = this.categories.find((c) => c.id === id);
+    if (!category) {
+      toast.error("Kategori tidak ditemukan!");
+      return false;
+    }
+
+    if (category.is_system) {
+      toast.error("⚠️ KATEGORI SISTEM TIDAK BISA DIHAPUS!", {
+        description: `Kategori "${category.name}" merupakan kategori bawaan sistem dan tidak dapat dihilangkan.`,
+      });
+      return false;
+    }
+
+    const recordCheck = this.hasCategoryTrackRecord(id);
+    if (recordCheck.hasRecord) {
+      toast.error("⚠️ KATEGORI TIDAK DAPAT DIHAPUS!", {
+        description: `Kategori "${category.name}" masih terikat dengan ${recordCheck.details.join(", ")}. Hapus data terkait lebih dulu atau nonaktifkan kategori.`,
+      });
+      return false;
+    }
+
+    this.categories = this.categories.filter((c) => c.id !== id);
+    this.logAudit("DELETE_CATEGORY", "CATEGORIES", id, `Menghapus kategori "${category.name}"`);
+    toast.success(`Kategori "${category.name}" berhasil dihapus!`);
+    emitChange();
+    return true;
+  }
 }
+
 
 export const mockStore = new Store();
 
