@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import { useMockStore } from "@/lib/mock-store";
 import {
   ArrowsDownUpIcon,
@@ -11,8 +11,8 @@ import {
   SwapIcon,
   TagIcon,
 } from "@phosphor-icons/react";
-import { CategoryManagement } from "@/components/categories/category-management";
-import { ImportTransactionsDialog } from "@/components/transactions/import-transactions-dialog";
+import { CategoryManagement } from "@/components/feature/categories/category-management";
+import { ImportTransactionsDialog } from "@/components/feature/transactions/import-transactions-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -60,7 +60,6 @@ export default function TransactionsPage() {
   const [txNote, setTxNote] = useState<string>("");
 
   // New Transfer Form State
-  const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [trFromWalletId, setTrFromWalletId] = useState<string>(accessibleWallets[0]?.id || "");
   const [trToWalletId, setTrToWalletId] = useState<string>(
     store.wallets.find((w) => w.id !== accessibleWallets[0]?.id)?.id || ""
@@ -76,27 +75,21 @@ export default function TransactionsPage() {
     );
   }, [store.categories, txType]);
 
-  // Default txCategoryId to first available category [0]
-  useEffect(() => {
-    if (availableCategories.length > 0) {
-      if (!txCategoryId || !availableCategories.some((c) => c.id === txCategoryId)) {
-        setTxCategoryId(availableCategories[0].id);
-      }
-    } else {
-      setTxCategoryId("");
-    }
-  }, [availableCategories, txCategoryId]);
+  const effectiveCategoryId =
+    txCategoryId && availableCategories.some((c) => c.id === txCategoryId)
+      ? txCategoryId
+      : availableCategories[0]?.id || "";
 
   // Live Warning calculations
   const numTxAmount = parseFloat(txAmount) || 0;
   const selectedWallet = store.wallets.find((w) => w.id === txWalletId);
   const isBalanceShort = txType === "expense" && selectedWallet && selectedWallet.balance < numTxAmount;
 
-  const selectedCategory = store.categories.find((c) => c.id === txCategoryId);
-  const categoryBudget = store.budgets.find((b) => b.category_id === txCategoryId);
+  const selectedCategory = store.categories.find((c) => c.id === effectiveCategoryId);
+  const categoryBudget = store.budgets.find((b) => b.category_id === effectiveCategoryId);
 
   const currentCatExpenses = store.transactions
-    .filter((t) => t.category_id === txCategoryId && t.type === "expense" && t.status === "active")
+    .filter((t) => t.category_id === effectiveCategoryId && t.type === "expense" && t.status === "active")
     .reduce((sum, t) => sum + t.amount, 0);
 
   const isOverbudget =
@@ -106,11 +99,11 @@ export default function TransactionsPage() {
 
   const handleCreateTransaction = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!txWalletId || !txCategoryId || numTxAmount <= 0) return;
+    if (!txWalletId || !effectiveCategoryId || numTxAmount <= 0) return;
 
     const success = store.addTransaction({
       wallet_id: txWalletId,
-      category_id: txCategoryId,
+      category_id: effectiveCategoryId,
       owner_id: activeUser.id,
       type: txType as "income" | "expense",
       amount: numTxAmount,
@@ -137,7 +130,7 @@ export default function TransactionsPage() {
       setTrAmount("");
       setTrFee("0");
       setTrNote("");
-      setIsTransferOpen(false);
+      setIsTxOpen(false);
     }
   };
 
@@ -215,7 +208,7 @@ export default function TransactionsPage() {
                 </TabsList>
 
                 {/* Form Pengeluaran / Pemasukan */}
-                {txType !== ("transfer" as any) ? (
+                {txType !== "transfer" ? (
                   <form onSubmit={handleCreateTransaction} className="space-y-4 pt-4">
                     {/* Warnings */}
                     {isBalanceShort && (

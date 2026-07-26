@@ -61,7 +61,7 @@ export function ImportTransactionsDialog() {
   const [selectedWalletId, setSelectedWalletId] = useState<string>(
     accessibleWallets[0]?.id || ""
   );
-  const [selectedOwnerId, setSelectedOwnerId] = useState<string>(activeUser.id);
+  const [selectedOwnerId] = useState<string>(activeUser.id);
   const [file, setFile] = useState<File | null>(null);
   const [parsedItems, setParsedItems] = useState<ParsedItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -144,7 +144,7 @@ export function ImportTransactionsDialog() {
   };
 
   // Helper to parse dates into YYYY-MM-DD
-  const normalizeDate = (rawDate: any): string => {
+  const normalizeDate = (rawDate: unknown): string => {
     if (!rawDate) return new Date().toISOString().split("T")[0];
 
     // Excel serial number format
@@ -177,12 +177,13 @@ export function ImportTransactionsDialog() {
     return new Date().toISOString().split("T")[0];
   };
 
-  const processRowData = (rows: any[]) => {
+  const processRowData = (rows: Record<string, unknown>[]) => {
     const items: ParsedItem[] = [];
 
-    rows.forEach((row, idx) => {
+    rows.forEach((rowRecord, idx) => {
+      const row = rowRecord as Record<string, unknown> | unknown[];
       // Handle array format or object format
-      let rawDate: any = "";
+      let rawDate: unknown = "";
       let rawDesc: string = "";
       let rawAmount: number = 0;
       let type: "income" | "expense" = "expense";
@@ -292,14 +293,14 @@ export function ImportTransactionsDialog() {
         skipEmptyLines: true,
         complete: (results) => {
           if (results.data && results.data.length > 0) {
-            processRowData(results.data);
+            processRowData(results.data as Record<string, unknown>[]);
           } else {
             // fallback no header
             Papa.parse(uploadedFile, {
               header: false,
               skipEmptyLines: true,
               complete: (resNoHeader) => {
-                processRowData(resNoHeader.data);
+                processRowData(resNoHeader.data as Record<string, unknown>[]);
               },
             });
           }
@@ -318,10 +319,11 @@ export function ImportTransactionsDialog() {
           const wb = XLSX.read(bstr, { type: "binary" });
           const wsname = wb.SheetNames[0];
           const ws = wb.Sheets[wsname];
-          const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+          const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as Record<string, unknown>[];
           processRowData(data);
-        } catch (err: any) {
-          toast.error(`Gagal mengurai file Excel: ${err?.message || "Format tidak didukung"}`);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : "Format tidak didukung";
+          toast.error(`Gagal mengurai file Excel: ${msg}`);
         } finally {
           setIsProcessing(false);
         }
@@ -343,7 +345,7 @@ export function ImportTransactionsDialog() {
     );
   };
 
-  const handleUpdateItem = (id: string, key: keyof ParsedItem, value: any) => {
+  const handleUpdateItem = <K extends keyof ParsedItem>(id: string, key: K, value: ParsedItem[K]) => {
     setParsedItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, [key]: value } : item))
     );

@@ -69,7 +69,8 @@ export default function Page() {
       if (isAdmin) {
         totalLiabilities += remaining;
       } else {
-        totalLiabilities += Math.round(remaining * (debt.portion_member / debt.principal));
+        const portionMember = debt.portion_member ?? debt.principal / 2;
+        totalLiabilities += Math.round(remaining * (portionMember / debt.principal));
       }
     }
   });

@@ -25,7 +25,6 @@ import { useMockStore } from "@/lib/mock-store";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const store = useMockStore();
-  const activeUser = store.getActiveUser();
   const { setOpenMobile, isMobile } = useSidebar();
 
   const menuItems = React.useMemo(() => {
@@ -67,13 +66,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavMain items={menuItems} />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser
-          user={{
-            name: activeUser.name,
-            email: activeUser.email,
-            avatar: store.activeRole === "admin" ? "/avatars/shadcn.jpg" : "/avatars/annisa.jpg",
-          }}
-        />
+        <NavUser />
       </SidebarFooter>
     </Sidebar>
   );

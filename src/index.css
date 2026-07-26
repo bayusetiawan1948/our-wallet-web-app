@@ -34,7 +34,41 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
   }
+
+  /* WebKit Global Scrollbar Customization (Scroll X & Scroll Y) */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: calc(var(--radius) * 2);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border-radius: calc(var(--radius) * 2);
+    border: 2px solid transparent;
+    background-clip: content-box;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--primary);
+  }
+
+  ::-webkit-scrollbar-thumb:active {
+    background-color: var(--primary);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-mono);

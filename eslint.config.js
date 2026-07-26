@@ -18,8 +18,8 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
-    rules: { // TODO: ONLY FOR MOCKUP, REMOVE THIS AFTER MOCKUP
-      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+    rules: {
+      'react-refresh/only-export-components': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
     },
   },

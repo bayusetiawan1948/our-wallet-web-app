@@ -34,6 +34,39 @@
 
 ---
 
+## 📂 Struktur Direktori Proyek
+
+```text
+our-wallets/
+├── public/                 # Asset statis publik
+├── src/
+│   ├── assets/            # Asset gambar, logo, dan ikon
+│   ├── components/        # Komponen UI terkonfigurasi
+│   │   ├── feature/       # Komponen spesifik fitur (dashboard, transactions, categories)
+│   │   ├── layouts/       # Komponen tata letak (Header, Sidebar, AppLayout)
+│   │   └── ui/            # Komponen dasar UI (shadcn/ui)
+│   ├── configs/           # Konfigurasi aplikasi
+│   ├── consts/            # Konstanta & data dummy/mock
+│   ├── contexts/          # Context React (User/Household, Theme state)
+│   ├── hooks/             # Custom React Hooks
+│   ├── lib/               # Utility library & helper functions (cn, formatters)
+│   ├── pages/             # Halaman-halaman utama (Dashboard, Wallets, Transactions, Budgets, Investments, Debts)
+│   ├── router/            # Konfigurasi routing aplikasi (React Router v7)
+│   ├── services/          # Layer layanan data & API
+│   ├── styles/            # Styling global & modul CSS
+│   ├── types/             # Definisi tipe data TypeScript
+│   ├── index.css          # Styling utama & skema warna Tailwind v4 (OKLCH)
+│   └── main.tsx           # Entry point utama aplikasi React
+├── ERD.md                 # Dokumentasi diagram E-R (Entity Relationship)
+├── design.md              # Spesifikasi sistem desain UI/UX
+├── index.html             # HTML template Vite
+├── package.json           # Dependensi & script proyek
+├── tsconfig.json          # Konfigurasi TypeScript
+└── vite.config.ts         # Konfigurasi bundler Vite
+```
+
+---
+
 ## 🚀 Panduan Memulai (Getting Started)
 
 ### Prasyarat

@@ -14,6 +14,7 @@ import type {
   Transaction,
   Transfer,
   Debt,
+  DebtType,
   DebtPayment,
   Investment,
   InvestmentTransaction,
@@ -130,6 +131,9 @@ const INITIAL_DEBTS: Debt[] = [
   {
     id: "debt-1",
     owner_household_id: "household-1",
+    created_by_user_id: "user-1",
+    assigned_to_user_id: "user-1",
+    assigned_user_ids: ["user-1", "user-2"],
     type: "utang",
     counterparty: "Bank BCA (KPR / Motor)",
     principal: 12000000,
@@ -142,6 +146,9 @@ const INITIAL_DEBTS: Debt[] = [
   {
     id: "debt-2",
     owner_user_id: "user-1",
+    created_by_user_id: "user-1",
+    assigned_to_user_id: "user-1",
+    assigned_user_ids: ["user-1"],
     type: "piutang",
     counterparty: "Rekan Kerja (Budi)",
     principal: 3000000,
@@ -672,6 +679,195 @@ class Store {
     this.debtPayments = [newPayment, ...this.debtPayments];
     this.logAudit("CREATE_DEBT_PAYMENT", "DEBT_PAYMENTS", newPayment.id, `Pembayaran ${debt.type} Rp ${amount.toLocaleString("id-ID")} via ${wallet.name}`);
     toast.success(`Pembayaran ${debt.type} berhasil dicatat!`);
+    emitChange();
+    return true;
+  }
+
+  hasDebtTrackRecord(debtId: string): boolean {
+    return this.debtPayments.some((p) => p.debt_id === debtId && p.status === "active");
+  }
+
+  addDebt(data: {
+    type: DebtType;
+    counterparty: string;
+    principal: number;
+    assigned_to_user_id?: string;
+    assigned_user_ids?: string[];
+    use_portion?: boolean;
+    portion_admin?: number;
+    portion_member?: number;
+    due_date: string;
+    note?: string;
+  }) {
+    if (!data.counterparty.trim()) {
+      toast.error("Nama Pihak Kedua (Counterparty) tidak boleh kosong!");
+      return false;
+    }
+    if (data.principal <= 0) {
+      toast.error("Nominal pokok harus lebih besar dari 0!");
+      return false;
+    }
+
+    const activeUserId = this.getActiveUser().id;
+    const defaultAssigned = data.assigned_user_ids && data.assigned_user_ids.length > 0
+      ? data.assigned_user_ids
+      : [activeUserId];
+
+    const newDebt: Debt = {
+      id: `debt-${Date.now()}`,
+      owner_household_id: "household-1",
+      created_by_user_id: activeUserId,
+      assigned_to_user_id: data.assigned_to_user_id || activeUserId,
+      assigned_user_ids: Array.from(new Set([activeUserId, ...defaultAssigned])),
+      type: data.type,
+      counterparty: data.counterparty.trim(),
+      principal: data.principal,
+      use_portion: data.use_portion ?? false,
+      portion_admin: data.use_portion ? (data.portion_admin ?? data.principal / 2) : undefined,
+      portion_member: data.use_portion ? (data.portion_member ?? data.principal / 2) : undefined,
+      due_date: data.due_date,
+      status: "belum_lunas",
+      note: data.note?.trim(),
+    };
+
+    this.debts = [newDebt, ...this.debts];
+    this.logAudit("CREATE_DEBT", "DEBTS", newDebt.id, `Menambahkan ${data.type} baru: ${data.counterparty} sebesar Rp ${data.principal.toLocaleString("id-ID")}`);
+    toast.success(`Catatan ${data.type} "${data.counterparty}" berhasil dibuat!`);
+    emitChange();
+    return true;
+  }
+
+  updateDebt(
+    id: string,
+    data: {
+      type: DebtType;
+      counterparty: string;
+      principal: number;
+      assigned_to_user_id?: string;
+      assigned_user_ids?: string[];
+      use_portion?: boolean;
+      portion_admin?: number;
+      portion_member?: number;
+      due_date: string;
+      note?: string;
+    }
+  ) {
+    const existing = this.debts.find((d) => d.id === id);
+    if (!existing) {
+      toast.error("Data utang/piutang tidak ditemukan!");
+      return false;
+    }
+
+    if (!data.counterparty.trim()) {
+      toast.error("Nama Pihak Kedua (Counterparty) tidak boleh kosong!");
+      return false;
+    }
+    if (data.principal <= 0) {
+      toast.error("Nominal pokok harus lebih besar dari 0!");
+      return false;
+    }
+
+    const paidTotal = this.debtPayments
+      .filter((p) => p.debt_id === id && p.status === "active")
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    let nextStatus = existing.status;
+    if (paidTotal >= data.principal) {
+      nextStatus = "lunas";
+    } else if (paidTotal > 0) {
+      nextStatus = "cicilan";
+    } else {
+      nextStatus = "belum_lunas";
+    }
+
+    const creatorId = existing.created_by_user_id || this.getActiveUser().id;
+    const updatedAssigned = data.assigned_user_ids && data.assigned_user_ids.length > 0
+      ? data.assigned_user_ids
+      : (existing.assigned_user_ids || [creatorId]);
+
+    this.debts = this.debts.map((d) => {
+      if (d.id === id) {
+        return {
+          ...d,
+          type: data.type,
+          counterparty: data.counterparty.trim(),
+          principal: data.principal,
+          assigned_to_user_id: data.assigned_to_user_id || creatorId,
+          assigned_user_ids: Array.from(new Set([creatorId, ...updatedAssigned])),
+          use_portion: data.use_portion ?? false,
+          portion_admin: data.use_portion ? (data.portion_admin ?? data.principal / 2) : undefined,
+          portion_member: data.use_portion ? (data.portion_member ?? data.principal / 2) : undefined,
+          due_date: data.due_date,
+          status: nextStatus,
+          note: data.note?.trim(),
+        };
+      }
+      return d;
+    });
+
+    this.logAudit("UPDATE_DEBT", "DEBTS", id, `Memperbarui ${data.type}: ${data.counterparty} sebesar Rp ${data.principal.toLocaleString("id-ID")}`);
+    toast.success(`Catatan ${data.type} "${data.counterparty}" berhasil diperbarui!`);
+    emitChange();
+    return true;
+  }
+
+  deleteDebt(id: string) {
+    const debt = this.debts.find((d) => d.id === id);
+    if (!debt) {
+      toast.error("Catatan utang/piutang tidak ditemukan!");
+      return false;
+    }
+
+    if (this.hasDebtTrackRecord(id)) {
+      toast.error("⚠️ DATA TIDAK DAPAT DIHAPUS!", {
+        description: `Utang/Piutang "${debt.counterparty}" sudah memiliki riwayat pembayaran/cicilan. Hapus pembayaran terkait lebih dulu atau ubah catatannya.`,
+      });
+      return false;
+    }
+
+    this.debts = this.debts.filter((d) => d.id !== id);
+    this.logAudit("DELETE_DEBT", "DEBTS", id, `Menghapus ${debt.type}: "${debt.counterparty}"`);
+    toast.success(`Catatan ${debt.type} "${debt.counterparty}" berhasil dihapus!`);
+    emitChange();
+    return true;
+  }
+
+  deleteDebtPayment(paymentId: string) {
+    const payment = this.debtPayments.find((p) => p.id === paymentId);
+    if (!payment) return false;
+
+    const debt = this.debts.find((d) => d.id === payment.debt_id);
+    if (!debt) return false;
+
+    // Revert wallet balance
+    const wallet = this.wallets.find((w) => w.id === payment.wallet_id);
+    if (wallet) {
+      const revertDiff = debt.type === "utang" ? payment.amount : -payment.amount;
+      this.wallets = this.wallets.map((w) =>
+        w.id === payment.wallet_id ? { ...w, balance: w.balance + revertDiff } : w
+      );
+    }
+
+    this.debtPayments = this.debtPayments.filter((p) => p.id !== paymentId);
+
+    // Recalculate debt status
+    const remainingPayments = this.debtPayments
+      .filter((p) => p.debt_id === debt.id && p.status === "active")
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const newStatus =
+      remainingPayments >= debt.principal
+        ? "lunas"
+        : remainingPayments > 0
+        ? "cicilan"
+        : "belum_lunas";
+
+    this.debts = this.debts.map((d) =>
+      d.id === debt.id ? { ...d, status: newStatus } : d
+    );
+
+    this.logAudit("DELETE_DEBT_PAYMENT", "DEBT_PAYMENTS", paymentId, `Membatalkan pembayaran Rp ${payment.amount.toLocaleString("id-ID")} untuk ${debt.counterparty}`);
+    toast.info("Pembayaran berhasil dibatalkan dan saldo wallet dikembalikan.");
     emitChange();
     return true;
   }
