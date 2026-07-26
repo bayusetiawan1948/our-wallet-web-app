@@ -1,5 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useMockStore } from "@/lib/mock-store";
+import { useDataControls, type FilterConfig } from "@/hooks/use-data-controls";
+import { DataTableToolbar } from "@/components/common/data-table-toolbar";
+import { DataPagination } from "@/components/common/data-table-pagination";
+import { EmptyState } from "@/components/common/empty-state";
+import { CardGridSkeleton, DataTableSkeleton } from "@/components/common/loading-skeleton";
+import { ErrorState } from "@/components/common/error-state";
 import {
   UsersThreeIcon,
   UserPlusIcon,
@@ -82,6 +88,52 @@ export default function HouseholdPage() {
 
   // Delete Member State
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+
+  // Data Controls for Members Grid
+  const memberFilterConfigs = useMemo<FilterConfig<(typeof store.members)[0]>[]>(() => {
+    return [
+      {
+        id: "role",
+        label: "Role / Akses",
+        type: "select",
+        options: [
+          { label: "Admin / Kepala Keluarga", value: "admin" },
+          { label: "Member / Pasangan", value: "member" },
+        ],
+      },
+    ];
+  }, []);
+
+  const memberSortOptions = useMemo(() => {
+    return [
+      { label: "Role", rules: [{ field: "role", order: "asc" as const }] },
+    ];
+  }, []);
+
+  const [memberSortIndex, setMemberSortIndex] = useState(0);
+
+  const memberControls = useDataControls({
+    data: store.members,
+    initialSort: memberSortOptions[0].rules,
+    initialPageSize: 10,
+  });
+
+  // Data Controls for Audit Logs Table
+  const auditSortOptions = useMemo(() => {
+    return [
+      { label: "Terbaru", rules: [{ field: "created_at", order: "desc" as const }] },
+      { label: "Terlama", rules: [{ field: "created_at", order: "asc" as const }] },
+    ];
+  }, []);
+
+  const [auditSortIndex, setAuditSortIndex] = useState(0);
+
+  const auditControls = useDataControls({
+    data: store.auditLogs,
+    searchFields: ["actor_name", "action", "details"],
+    initialSort: auditSortOptions[0].rules,
+    initialPageSize: 10,
+  });
 
   const handleAddMember = (e: React.FormEvent) => {
     e.preventDefault();
@@ -247,8 +299,42 @@ export default function HouseholdPage() {
 
         {/* Tab 1: Members & Access */}
         <TabsContent value="members" className="space-y-6 pt-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {store.members.map((member) => {
+          <div className="bg-card border border-border/60 p-4 rounded-xl shadow-2xs">
+            <DataTableToolbar
+              searchQuery={memberControls.searchQuery}
+              onSearchChange={memberControls.setSearchQuery}
+              searchPlaceholder="Cari anggota..."
+              filterConfigs={memberFilterConfigs}
+              filters={memberControls.filters}
+              onFilterChange={memberControls.setFilter}
+              onClearFilters={memberControls.clearAllFilters}
+              activeFilterCount={memberControls.activeFilterCount}
+              sortOptions={memberSortOptions}
+              currentSortIndex={memberSortIndex}
+              onSortChange={(idx) => {
+                setMemberSortIndex(idx);
+                memberControls.setSortRules(memberSortOptions[idx].rules);
+              }}
+            />
+          </div>
+
+          {store.simulatedError ? (
+            <ErrorState onRetry={() => store.setSimulatedError(false)} />
+          ) : store.simulatedLoading ? (
+            <CardGridSkeleton count={2} />
+          ) : memberControls.paginatedData.length === 0 ? (
+            <EmptyState
+              icon={UsersThreeIcon}
+              title="Tidak Ada Anggota"
+              description="Belum ada anggota keluarga atau pasangan yang tercatat."
+              isFiltered={memberControls.activeFilterCount > 0 || memberControls.searchQuery.trim() !== ""}
+              onReset={memberControls.clearAllFilters}
+              actionLabel="Tambah Member"
+              onAction={() => setIsAddOpen(true)}
+            />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {memberControls.paginatedData.map((member) => {
               const user = store.users.find((u) => u.id === member.user_id);
               if (!user) return null;
 
@@ -420,37 +506,74 @@ export default function HouseholdPage() {
               );
             })}
           </div>
+          )}
+
+          <DataPagination
+            page={memberControls.page}
+            totalPages={memberControls.totalPages}
+            totalItems={memberControls.totalItems}
+            pageSize={memberControls.pageSize}
+            onPageChange={memberControls.setPage}
+          />
         </TabsContent>
 
         {/* Tab 2: Audit Logs */}
-        <TabsContent value="audit-logs" className="pt-4">
+        <TabsContent value="audit-logs" className="pt-4 space-y-4">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Audit Trail & Riwayat Aktivitas</CardTitle>
-              <CardDescription>
-                Pencatatan aktivitas perubahan data sistem, penambahan anggota, dan akses dompet secara mutlak.
-              </CardDescription>
+            <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b">
+              <div>
+                <CardTitle className="text-lg">Audit Trail & Riwayat Aktivitas</CardTitle>
+                <CardDescription>
+                  Pencatatan aktivitas perubahan data sistem, penambahan anggota, dan akses dompet secara mutlak.
+                </CardDescription>
+              </div>
             </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[180px]">Waktu</TableHead>
-                    <TableHead>Pengguna (Actor)</TableHead>
-                    <TableHead>Aksi</TableHead>
-                    <TableHead>Tipe Entity</TableHead>
-                    <TableHead>Detail Perubahan</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {store.auditLogs.length === 0 ? (
+            <CardContent className="pt-4 space-y-4">
+              <DataTableToolbar
+                searchQuery={auditControls.searchQuery}
+                onSearchChange={auditControls.setSearchQuery}
+                searchPlaceholder="Cari log aktivitas..."
+                filters={auditControls.filters}
+                onFilterChange={auditControls.setFilter}
+                onClearFilters={auditControls.clearAllFilters}
+                activeFilterCount={auditControls.activeFilterCount}
+                sortOptions={auditSortOptions}
+                currentSortIndex={auditSortIndex}
+                onSortChange={(idx) => {
+                  setAuditSortIndex(idx);
+                  auditControls.setSortRules(auditSortOptions[idx].rules);
+                }}
+              />
+
+              {store.simulatedError ? (
+                <ErrorState onRetry={() => store.setSimulatedError(false)} />
+              ) : store.simulatedLoading ? (
+                <DataTableSkeleton rows={5} cols={5} />
+              ) : (
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
-                        Belum ada log aktivitas.
-                      </TableCell>
+                      <TableHead className="w-[180px]">Waktu</TableHead>
+                      <TableHead>Pengguna (Actor)</TableHead>
+                      <TableHead>Aksi</TableHead>
+                      <TableHead>Tipe Entity</TableHead>
+                      <TableHead>Detail Perubahan</TableHead>
                     </TableRow>
-                  ) : (
-                    store.auditLogs.map((log) => (
+                  </TableHeader>
+                  <TableBody>
+                    {auditControls.paginatedData.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="p-0">
+                          <EmptyState
+                            title="Belum Ada Log Aktivitas"
+                            description="Belum ada pencatatan aktivitas atau perubahan sistem yang terekam."
+                            isFiltered={auditControls.activeFilterCount > 0 || auditControls.searchQuery.trim() !== ""}
+                            onReset={auditControls.clearAllFilters}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                    auditControls.paginatedData.map((log) => (
                       <TableRow key={log.id}>
                         <TableCell className="font-mono text-xs text-muted-foreground">
                           {log.created_at}
@@ -468,6 +591,15 @@ export default function HouseholdPage() {
                   )}
                 </TableBody>
               </Table>
+              )}
+
+              <DataPagination
+                page={auditControls.page}
+                totalPages={auditControls.totalPages}
+                totalItems={auditControls.totalItems}
+                pageSize={auditControls.pageSize}
+                onPageChange={auditControls.setPage}
+              />
             </CardContent>
           </Card>
         </TabsContent>

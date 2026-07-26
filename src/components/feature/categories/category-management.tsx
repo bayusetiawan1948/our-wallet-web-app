@@ -1,6 +1,12 @@
 import React, { useState, useMemo } from "react";
 import { useMockStore } from "@/lib/mock-store";
 import { type Category, type CategoryType } from "@/types";
+import { useDataControls, type FilterConfig } from "@/hooks/use-data-controls";
+import { DataTableToolbar } from "@/components/common/data-table-toolbar";
+import { DataPagination } from "@/components/common/data-table-pagination";
+import { EmptyState } from "@/components/common/empty-state";
+import { DataTableSkeleton } from "@/components/common/loading-skeleton";
+import { ErrorState } from "@/components/common/error-state";
 import {
   MoneyIcon,
   BriefcaseIcon,
@@ -26,9 +32,6 @@ import {
   PencilIcon,
   TrashIcon,
   LockIcon,
-  XIcon,
-  MagnifyingGlassIcon,
-  FunnelIcon,
   InfoIcon,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
@@ -99,11 +102,6 @@ export function CategoryManagement() {
   const store = useMockStore();
   const isAdmin = store.activeRole === "admin";
 
-  // Filter states
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterType, setFilterType] = useState<string>("all");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
-
   // Form Dialog state (Add / Edit)
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -161,27 +159,48 @@ export function CategoryManagement() {
     setDeletingCategory(null);
   };
 
-  // Filter categories
-  const filteredCategories = useMemo(() => {
-    return store.categories.filter((cat) => {
-      // Search
-      const matchesSearch = cat.name.toLowerCase().includes(searchQuery.toLowerCase());
+  // Filter categories with useDataControls
+  const catFilterConfigs = useMemo<FilterConfig<Category>[]>(() => {
+    return [
+      {
+        id: "type",
+        label: "Tipe",
+        type: "select",
+        options: [
+          { label: "Pemasukan", value: "income" },
+          { label: "Pengeluaran", value: "expense" },
+          { label: "Pemasukan & Pengeluaran", value: "both" },
+        ],
+      },
+      {
+        id: "status",
+        label: "Status",
+        type: "select",
+        options: [
+          { label: "Aktif", value: "active" },
+          { label: "Non-aktif", value: "inactive" },
+        ],
+      },
+    ];
+  }, []);
 
-      // Type filter
-      let matchesType = true;
-      if (filterType !== "all") {
-        matchesType = cat.type === filterType;
-      }
+  const catSortOptions = useMemo(() => {
+    return [
+      { label: "Nama (A - Z)", rules: [{ field: "name", order: "asc" as const }] },
+      { label: "Nama (Z - A)", rules: [{ field: "name", order: "desc" as const }] },
+      { label: "Tipe", rules: [{ field: "type", order: "asc" as const }] },
+    ];
+  }, []);
 
-      // Status filter
-      let matchesStatus = true;
-      if (filterStatus === "active") matchesStatus = cat.is_active;
-      if (filterStatus === "inactive") matchesStatus = !cat.is_active;
-      if (filterStatus === "system") matchesStatus = cat.is_system;
+  const [catSortIndex, setCatSortIndex] = useState(0);
 
-      return matchesSearch && matchesType && matchesStatus;
-    });
-  }, [store.categories, searchQuery, filterType, filterStatus]);
+  const catControls = useDataControls<Category>({
+    data: store.categories,
+    searchFields: ["name", "id"],
+    searchPredicate: (item, q) => item.name.toLowerCase().includes(q) || item.id.toLowerCase().includes(q),
+    initialSort: catSortOptions[0].rules,
+    initialPageSize: 10,
+  });
 
   // Statistics
   const totalCategories = store.categories.length;
@@ -267,83 +286,62 @@ export function CategoryManagement() {
 
       {/* Filter Toolbar */}
       <Card className="shadow-none border-border/60">
-        <CardContent className="p-4 space-y-3">
-          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-            {/* Search Input */}
-            <div className="relative flex-1">
-              <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              <Input
-                placeholder="Cari nama kategori..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 text-sm"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <XIcon className="size-3.5" />
-                </button>
-              )}
-            </div>
-
-            {/* Type Filter */}
-            <div className="w-full sm:w-48 shrink-0">
-              <Select value={filterType} onValueChange={setFilterType}>
-                <SelectTrigger className="text-xs">
-                  <FunnelIcon className="size-3.5 mr-2 text-muted-foreground inline" />
-                  <SelectValue placeholder="Semua Tipe" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Tipe</SelectItem>
-                  <SelectItem value="income">🟢 Pemasukan saja</SelectItem>
-                  <SelectItem value="expense">🔴 Pengeluaran saja</SelectItem>
-                  <SelectItem value="both">🔵 Pemasukan & Pengeluaran</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Status Filter */}
-            <div className="w-full sm:w-44 shrink-0">
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="text-xs">
-                  <SelectValue placeholder="Semua Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Status</SelectItem>
-                  <SelectItem value="active">Aktif</SelectItem>
-                  <SelectItem value="inactive">Non-aktif</SelectItem>
-                  <SelectItem value="system">Bawaan Sistem</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+        <CardContent className="p-4">
+          <DataTableToolbar
+            searchQuery={catControls.searchQuery}
+            onSearchChange={catControls.setSearchQuery}
+            searchPlaceholder="Cari nama kategori atau ID..."
+            filterConfigs={catFilterConfigs}
+            filters={catControls.filters}
+            onFilterChange={catControls.setFilter}
+            onClearFilters={catControls.clearAllFilters}
+            activeFilterCount={catControls.activeFilterCount}
+            sortOptions={catSortOptions}
+            currentSortIndex={catSortIndex}
+            onSortChange={(idx) => {
+              setCatSortIndex(idx);
+              catControls.setSortRules(catSortOptions[idx].rules);
+            }}
+          />
         </CardContent>
       </Card>
 
       {/* Category Table List */}
       <Card className="shadow-none border-border/60 overflow-hidden">
-        <Table>
-          <TableHeader className="bg-muted/40">
-            <TableRow>
-              <TableHead className="w-[60px]">Ikon</TableHead>
-              <TableHead>Nama Kategori</TableHead>
-              <TableHead>Tipe</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Penggunaan Data</TableHead>
-              <TableHead className="text-right">Aksi</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredCategories.length === 0 ? (
+        {store.simulatedError ? (
+          <ErrorState onRetry={() => store.setSimulatedError(false)} />
+        ) : store.simulatedLoading ? (
+          <DataTableSkeleton rows={5} cols={6} />
+        ) : (
+          <CardContent className="p-0">
+            <Table className="border-b border-border/60">
+            <TableHeader className="bg-muted/40">
               <TableRow>
-                <TableCell colSpan={6} className="h-32 text-center text-muted-foreground text-sm">
-                  Tidak ada kategori yang cocok dengan filter.
-                </TableCell>
+                <TableHead className="w-[60px]">Ikon</TableHead>
+                <TableHead>Nama Kategori</TableHead>
+                <TableHead>Tipe</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Penggunaan Data</TableHead>
+                <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
-            ) : (
-              filteredCategories.map((category) => {
+            </TableHeader>
+            <TableBody>
+              {catControls.paginatedData.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="p-0">
+                    <EmptyState
+                      icon={TagIcon}
+                      title="Tidak Ada Kategori"
+                      description="Belum ada kategori transaksi yang terdaftar atau cocok dengan pencarian."
+                      isFiltered={catControls.activeFilterCount > 0 || catControls.searchQuery.trim() !== ""}
+                      onReset={catControls.clearAllFilters}
+                      actionLabel={isAdmin ? "Tambah Kategori Baru" : undefined}
+                      onAction={isAdmin ? openCreateDialog : undefined}
+                    />
+                  </TableCell>
+                </TableRow>
+              ) : (
+                catControls.paginatedData.map((category) => {
                 const IconComp = getCategoryIcon(category.icon);
                 const trackRecord = store.hasCategoryTrackRecord(category.id);
 
@@ -467,7 +465,18 @@ export function CategoryManagement() {
               })
             )}
           </TableBody>
-        </Table>
+          </Table>
+          <div className="p-4 border-t">
+            <DataPagination
+              page={catControls.page}
+              totalPages={catControls.totalPages}
+              totalItems={catControls.totalItems}
+              pageSize={catControls.pageSize}
+              onPageChange={catControls.setPage}
+            />
+          </div>
+        </CardContent>
+      )}
       </Card>
 
       {/* Add / Edit Category Dialog */}

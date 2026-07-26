@@ -1,5 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useMockStore } from "@/lib/mock-store";
+import { useDataControls, type FilterConfig } from "@/hooks/use-data-controls";
+import { DataTableToolbar } from "@/components/common/data-table-toolbar";
+import { DataPagination } from "@/components/common/data-table-pagination";
+import { EmptyState } from "@/components/common/empty-state";
+import { CardGridSkeleton, DataTableSkeleton } from "@/components/common/loading-skeleton";
+import { ErrorState } from "@/components/common/error-state";
 import {
   ChartLineUpIcon,
   PlusIcon,
@@ -82,8 +88,41 @@ export default function InvestmentPage() {
     }
   };
 
-  // Calculate investment summaries
-  const investmentSummaries = store.investments.map((inv) => {
+  // Data Controls for Investment Assets Grid
+  const invFilterConfigs = useMemo<FilterConfig<(typeof store.investments)[0]>[]>(() => {
+    return [
+      {
+        id: "asset_type",
+        label: "Kategori Aset",
+        type: "select",
+        options: [
+          { label: "Saham", value: "saham" },
+          { label: "Crypto", value: "crypto" },
+          { label: "Emas / Logam Mulia", value: "emas" },
+          { label: "Reksadana", value: "reksadana" },
+        ],
+      },
+    ];
+  }, []);
+
+  const invSortOptions = useMemo(() => {
+    return [
+      { label: "Nama Aset (A - Z)", rules: [{ field: "asset_name", order: "asc" as const }] },
+      { label: "Nama Aset (Z - A)", rules: [{ field: "asset_name", order: "desc" as const }] },
+    ];
+  }, []);
+
+  const [invSortIndex, setInvSortIndex] = useState(0);
+
+  const invControls = useDataControls({
+    data: store.investments,
+    searchFields: ["asset_name", "asset_type"],
+    initialSort: invSortOptions[0].rules,
+    initialPageSize: 10,
+  });
+
+  // Calculate investment summaries from controls data
+  const investmentSummaries = invControls.paginatedData.map((inv) => {
     const activeTxs = store.investmentTransactions.filter(
       (itx) => itx.investment_id === inv.id && itx.status === "active"
     );
@@ -116,6 +155,24 @@ export default function InvestmentPage() {
       returnAmount,
       returnPct,
     };
+  });
+
+  // Data Controls for Investment Transactions History
+  const itxSortOptions = useMemo(() => {
+    return [
+      { label: "Tanggal Terbaru", rules: [{ field: "date", order: "desc" as const }] },
+      { label: "Tanggal Terlama", rules: [{ field: "date", order: "asc" as const }] },
+      { label: "Quantity Terbesar", rules: [{ field: "quantity", order: "desc" as const }] },
+    ];
+  }, []);
+
+  const [itxSortIndex, setItxSortIndex] = useState(0);
+
+  const itxControls = useDataControls({
+    data: store.investmentTransactions,
+    searchFields: ["date"],
+    initialSort: itxSortOptions[0].rules,
+    initialPageSize: 10,
   });
 
   const totalPortfolioMarketValue = investmentSummaries.reduce((sum, s) => sum + s.marketValue, 0);
@@ -153,9 +210,42 @@ export default function InvestmentPage() {
         </div>
       </div>
 
+      {/* Filter Toolbar for Investments Grid */}
+      <div className="bg-card border border-border/60 p-4 rounded-xl shadow-2xs">
+        <DataTableToolbar
+          searchQuery={invControls.searchQuery}
+          onSearchChange={invControls.setSearchQuery}
+          searchPlaceholder="Cari aset investasi..."
+          filterConfigs={invFilterConfigs}
+          filters={invControls.filters}
+          onFilterChange={invControls.setFilter}
+          onClearFilters={invControls.clearAllFilters}
+          activeFilterCount={invControls.activeFilterCount}
+          sortOptions={invSortOptions}
+          currentSortIndex={invSortIndex}
+          onSortChange={(idx) => {
+            setInvSortIndex(idx);
+            invControls.setSortRules(invSortOptions[idx].rules);
+          }}
+        />
+      </div>
+
       {/* Investment Assets Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {investmentSummaries.map(({ inv, currentQty, unitPrice, marketValue, returnAmount, returnPct }) => (
+      {store.simulatedError ? (
+        <ErrorState onRetry={() => store.setSimulatedError(false)} />
+      ) : store.simulatedLoading ? (
+        <CardGridSkeleton count={3} />
+      ) : investmentSummaries.length === 0 ? (
+        <EmptyState
+          icon={ChartLineUpIcon}
+          title="Tidak Ada Portofolio Investasi"
+          description="Belum ada aset saham, reksadana, emas, atau kripto yang tercatat."
+          isFiltered={invControls.activeFilterCount > 0 || invControls.searchQuery.trim() !== ""}
+          onReset={invControls.clearAllFilters}
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {investmentSummaries.map(({ inv, currentQty, unitPrice, marketValue, returnAmount, returnPct }) => (
           <Card key={inv.id} className="relative overflow-hidden border-border/60">
             <CardHeader className="flex flex-row items-start justify-between pb-2">
               <div>
@@ -337,34 +427,69 @@ export default function InvestmentPage() {
           </Card>
         ))}
       </div>
+      )}
+
+      <DataPagination
+        page={invControls.page}
+        totalPages={invControls.totalPages}
+        totalItems={invControls.totalItems}
+        pageSize={invControls.pageSize}
+        onPageChange={invControls.setPage}
+      />
 
       {/* Investment Transactions History */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b">
           <CardTitle className="text-lg">Riwayat Transaksi Investasi (`INVESTMENT_TRANSACTIONS`)</CardTitle>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Tanggal</TableHead>
-                <TableHead>Nama Aset</TableHead>
-                <TableHead>Tipe</TableHead>
-                <TableHead>Wallet Terkait</TableHead>
-                <TableHead className="text-right">Quantity</TableHead>
-                <TableHead className="text-right">Harga Unit</TableHead>
-                <TableHead className="text-right">Total Nominal</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {store.investmentTransactions.length === 0 ? (
+        <CardContent className="pt-4 space-y-4">
+          <DataTableToolbar
+            searchQuery={itxControls.searchQuery}
+            onSearchChange={itxControls.setSearchQuery}
+            searchPlaceholder="Cari transaksi berdasarkan tanggal..."
+            filters={itxControls.filters}
+            onFilterChange={itxControls.setFilter}
+            onClearFilters={itxControls.clearAllFilters}
+            activeFilterCount={itxControls.activeFilterCount}
+            sortOptions={itxSortOptions}
+            currentSortIndex={itxSortIndex}
+            onSortChange={(idx) => {
+              setItxSortIndex(idx);
+              itxControls.setSortRules(itxSortOptions[idx].rules);
+            }}
+          />
+
+          {store.simulatedError ? (
+            <ErrorState onRetry={() => store.setSimulatedError(false)} />
+          ) : store.simulatedLoading ? (
+            <DataTableSkeleton rows={5} cols={7} />
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
-                    Belum ada riwayat transaksi investasi.
-                  </TableCell>
+                  <TableHead>Tanggal</TableHead>
+                  <TableHead>Nama Aset</TableHead>
+                  <TableHead>Tipe</TableHead>
+                  <TableHead>Wallet Terkait</TableHead>
+                  <TableHead className="text-right">Quantity</TableHead>
+                  <TableHead className="text-right">Harga Unit</TableHead>
+                  <TableHead className="text-right">Total Nominal</TableHead>
                 </TableRow>
-              ) : (
-                store.investmentTransactions.map((itx) => {
+              </TableHeader>
+              <TableBody>
+                {itxControls.paginatedData.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="p-0">
+                      <EmptyState
+                        title="Belum Ada Transaksi Investasi"
+                        description="Belum ada riwayat transaksi jual atau beli unit aset investasi."
+                        isFiltered={itxControls.activeFilterCount > 0 || itxControls.searchQuery.trim() !== ""}
+                        onReset={itxControls.clearAllFilters}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                itxControls.paginatedData.map((itx) => {
                   const inv = store.investments.find((i) => i.id === itx.investment_id);
                   const wallet = store.wallets.find((w) => w.id === itx.wallet_id);
                   const total = itx.quantity * itx.price;
@@ -390,6 +515,15 @@ export default function InvestmentPage() {
               )}
             </TableBody>
           </Table>
+          )}
+
+          <DataPagination
+            page={itxControls.page}
+            totalPages={itxControls.totalPages}
+            totalItems={itxControls.totalItems}
+            pageSize={itxControls.pageSize}
+            onPageChange={itxControls.setPage}
+          />
         </CardContent>
       </Card>
     </div>

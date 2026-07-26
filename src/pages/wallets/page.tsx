@@ -1,6 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useMockStore } from "@/lib/mock-store";
 import type { WalletType } from "@/types";
+import { useDataControls, type FilterConfig } from "@/hooks/use-data-controls";
+import { DataTableToolbar } from "@/components/common/data-table-toolbar";
+import { DataPagination } from "@/components/common/data-table-pagination";
+import { EmptyState } from "@/components/common/empty-state";
+import { CardGridSkeleton, DataTableSkeleton } from "@/components/common/loading-skeleton";
+import { ErrorState } from "@/components/common/error-state";
 import {
   WalletIcon,
   ScalesIcon,
@@ -92,6 +98,56 @@ export default function WalletsPage() {
   const recordedBal = selectedWallet?.balance || 0;
   const numActual = parseFloat(actualBalanceInput) || 0;
   const diff = numActual - recordedBal;
+
+  // Data Controls for Wallets Grid
+  const walletFilterConfigs = useMemo<FilterConfig<(typeof store.wallets)[0]>[]>(() => {
+    return [
+      {
+        id: "type",
+        label: "Tipe Dompet",
+        type: "select",
+        options: [
+          { label: "Bank", value: "bank" },
+          { label: "E-Wallet", value: "ewallet" },
+          { label: "Cash / Uang Tunai", value: "cash" },
+        ],
+      },
+    ];
+  }, []);
+
+  const walletSortOptions = useMemo(() => {
+    return [
+      { label: "Saldo Terbesar", rules: [{ field: "balance", order: "desc" as const }] },
+      { label: "Saldo Terkecil", rules: [{ field: "balance", order: "asc" as const }] },
+      { label: "Nama (A - Z)", rules: [{ field: "name", order: "asc" as const }] },
+    ];
+  }, []);
+
+  const [walletSortIndex, setWalletSortIndex] = useState(0);
+
+  const walletControls = useDataControls({
+    data: accessibleWallets,
+    searchFields: ["name", "type"],
+    initialSort: walletSortOptions[0].rules,
+    initialPageSize: 10,
+  });
+
+  // Data Controls for Reconciliations Table
+  const recSortOptions = useMemo(() => {
+    return [
+      { label: "Tanggal Terbaru", rules: [{ field: "date", order: "desc" as const }] },
+      { label: "Tanggal Terlama", rules: [{ field: "date", order: "asc" as const }] },
+    ];
+  }, []);
+
+  const [recSortIndex, setRecSortIndex] = useState(0);
+
+  const recControls = useDataControls({
+    data: store.reconciliations,
+    searchFields: ["notes", "date"],
+    initialSort: recSortOptions[0].rules,
+    initialPageSize: 10,
+  });
 
   const handleReconcile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -295,9 +351,44 @@ export default function WalletsPage() {
           )}
         </div>
 
+        {/* Toolbar for Wallets */}
+        <div className="bg-card border border-border/60 p-4 rounded-xl shadow-2xs">
+          <DataTableToolbar
+            searchQuery={walletControls.searchQuery}
+            onSearchChange={walletControls.setSearchQuery}
+            searchPlaceholder="Cari nama dompet..."
+            filterConfigs={walletFilterConfigs}
+            filters={walletControls.filters}
+            onFilterChange={walletControls.setFilter}
+            onClearFilters={walletControls.clearAllFilters}
+            activeFilterCount={walletControls.activeFilterCount}
+            sortOptions={walletSortOptions}
+            currentSortIndex={walletSortIndex}
+            onSortChange={(idx) => {
+              setWalletSortIndex(idx);
+              walletControls.setSortRules(walletSortOptions[idx].rules);
+            }}
+          />
+        </div>
+
         {/* Accessible Wallets Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {accessibleWallets.map((w) => {
+        {store.simulatedError ? (
+          <ErrorState onRetry={() => store.setSimulatedError(false)} />
+        ) : store.simulatedLoading ? (
+          <CardGridSkeleton count={4} />
+        ) : walletControls.paginatedData.length === 0 ? (
+          <EmptyState
+            icon={WalletIcon}
+            title="Tidak Ada Dompet"
+            description="Belum ada akun dompet atau kantong bersama yang tercatat."
+            isFiltered={walletControls.activeFilterCount > 0 || walletControls.searchQuery.trim() !== ""}
+            onReset={walletControls.clearAllFilters}
+            actionLabel={isAdmin ? "Tambah Dompet Baru" : undefined}
+            onAction={isAdmin ? () => setIsAddOpen(true) : undefined}
+          />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {walletControls.paginatedData.map((w) => {
             const ownerUser = store.users.find((u) => u.id === w.owner_user_id);
             const trackCheck = store.hasWalletTrackRecord(w.id);
             const canEdit = isAdmin || w.owner_user_id === activeUser.id;
@@ -549,36 +640,73 @@ export default function WalletsPage() {
             );
           })}
         </div>
+        )}
+
+        <DataPagination
+          page={walletControls.page}
+          totalPages={walletControls.totalPages}
+          totalItems={walletControls.totalItems}
+          pageSize={walletControls.pageSize}
+          onPageChange={walletControls.setPage}
+        />
 
         {/* Reconciliation History */}
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Riwayat Rekonsiliasi (`WALLET_RECONCILIATIONS`)</CardTitle>
-            <CardDescription>
-              Catatan historis audit pencocokan saldo dompet dan penyesuaian koreksi.
-            </CardDescription>
+          <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b">
+            <div>
+              <CardTitle className="text-lg">Riwayat Rekonsiliasi (`WALLET_RECONCILIATIONS`)</CardTitle>
+              <CardDescription>
+                Catatan historis audit pencocokan saldo dompet dan penyesuaian koreksi.
+              </CardDescription>
+            </div>
           </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Tanggal</TableHead>
-                  <TableHead>Nama Wallet</TableHead>
-                  <TableHead className="text-right">Saldo Tercatat</TableHead>
-                  <TableHead className="text-right">Saldo Aktual</TableHead>
-                  <TableHead className="text-right">Selisih Penyesuaian</TableHead>
-                  <TableHead>Catatan</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {store.reconciliations.length === 0 ? (
+          <CardContent className="pt-4 space-y-4">
+            <DataTableToolbar
+              searchQuery={recControls.searchQuery}
+              onSearchChange={recControls.setSearchQuery}
+              searchPlaceholder="Cari catatan rekonsiliasi..."
+              filters={recControls.filters}
+              onFilterChange={recControls.setFilter}
+              onClearFilters={recControls.clearAllFilters}
+              activeFilterCount={recControls.activeFilterCount}
+              sortOptions={recSortOptions}
+              currentSortIndex={recSortIndex}
+              onSortChange={(idx) => {
+                setRecSortIndex(idx);
+                recControls.setSortRules(recSortOptions[idx].rules);
+              }}
+            />
+
+            {store.simulatedError ? (
+              <ErrorState onRetry={() => store.setSimulatedError(false)} />
+            ) : store.simulatedLoading ? (
+              <DataTableSkeleton rows={3} cols={6} />
+            ) : (
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
-                      Belum ada riwayat rekonsiliasi dompet.
-                    </TableCell>
+                    <TableHead>Tanggal</TableHead>
+                    <TableHead>Nama Wallet</TableHead>
+                    <TableHead className="text-right">Saldo Tercatat</TableHead>
+                    <TableHead className="text-right">Saldo Aktual</TableHead>
+                    <TableHead className="text-right">Selisih Penyesuaian</TableHead>
+                    <TableHead>Catatan</TableHead>
                   </TableRow>
-                ) : (
-                  store.reconciliations.map((rec) => {
+                </TableHeader>
+                <TableBody>
+                  {recControls.paginatedData.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="p-0">
+                        <EmptyState
+                          title="Belum Ada Riwayat Rekonsiliasi"
+                          description="Belum ada aktivitas audit pencocokan saldo dompet yang dilakukan."
+                          isFiltered={recControls.activeFilterCount > 0 || recControls.searchQuery.trim() !== ""}
+                          onReset={recControls.clearAllFilters}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                  recControls.paginatedData.map((rec) => {
                     const wallet = store.wallets.find((w) => w.id === rec.wallet_id);
                     const diffVal = rec.actual_balance - rec.recorded_balance;
 
@@ -602,6 +730,15 @@ export default function WalletsPage() {
                 )}
               </TableBody>
             </Table>
+            )}
+
+            <DataPagination
+              page={recControls.page}
+              totalPages={recControls.totalPages}
+              totalItems={recControls.totalItems}
+              pageSize={recControls.pageSize}
+              onPageChange={recControls.setPage}
+            />
           </CardContent>
         </Card>
       </div>

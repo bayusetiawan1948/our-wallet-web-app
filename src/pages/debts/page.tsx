@@ -12,13 +12,18 @@ import {
   PencilIcon,
   TrashIcon,
   UserIcon,
-  MagnifyingGlassIcon,
   XCircleIcon,
   UsersThreeIcon,
   EyeIcon,
   UserCheckIcon,
 } from "@phosphor-icons/react";
+import { useDataControls, type FilterConfig } from "@/hooks/use-data-controls";
+import { DataTableToolbar } from "@/components/common/data-table-toolbar";
+import { DataPagination } from "@/components/common/data-table-pagination";
 import { DebtDetailDialog } from "@/components/feature/debts/debt-detail-dialog";
+import { EmptyState } from "@/components/common/empty-state";
+import { DataTableSkeleton } from "@/components/common/loading-skeleton";
+import { ErrorState } from "@/components/common/error-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -79,12 +84,6 @@ export default function DebtsReceivablesPage() {
   const activeUser = store.getActiveUser();
   const accessibleWallets = store.getAccessibleWallets();
   const users = store.users;
-
-  // Filter States
-  const [searchQuery, setSearchQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
 
   // Create & Edit Modal State
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -213,27 +212,101 @@ export default function DebtsReceivablesPage() {
     }
   };
 
-  // Filtered Debts List
-  const filteredDebts = useMemo(() => {
-    return store.debts.filter((d) => {
-      // Search
-      const matchesSearch =
-        d.counterparty.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (d.note && d.note.toLowerCase().includes(searchQuery.toLowerCase()));
+  // Data Controls for Debts
+  const debtFilterConfigs = useMemo<FilterConfig<Debt>[]>(() => {
+    return [
+      {
+        id: "type",
+        label: "Tipe Record",
+        type: "select",
+        options: [
+          { label: "Utang Kami (Kewajiban)", value: "utang" },
+          { label: "Piutang Kami (Tagihan)", value: "piutang" },
+        ],
+      },
+      {
+        id: "status",
+        label: "Status Pelunasan",
+        type: "select",
+        options: [
+          { label: "Belum Dibayar", value: "belum_lunas" },
+          { label: "Cicilan", value: "cicilan" },
+          { label: "Lunas", value: "lunas" },
+        ],
+      },
+      {
+        id: "assigned_to_user_id",
+        label: "Penanggung Jawab",
+        type: "select",
+        options: users.map((u) => ({ label: u.name, value: u.id })),
+      },
+    ];
+  }, [users]);
 
-      // Type Filter
-      const matchesType = typeFilter === "all" || d.type === typeFilter;
+  const debtSortOptions = useMemo(() => {
+    return [
+      { label: "Jatuh Tempo Terdekat", rules: [{ field: "due_date", order: "asc" as const }] },
+      { label: "Jatuh Tempo Terjauh", rules: [{ field: "due_date", order: "desc" as const }] },
+      { label: "Pokok Terbesar", rules: [{ field: "principal", order: "desc" as const }] },
+      { label: "Pokok Terkecil", rules: [{ field: "principal", order: "asc" as const }] },
+    ];
+  }, []);
 
-      // Status Filter
-      const matchesStatus = statusFilter === "all" || d.status === statusFilter;
+  const [debtSortIndex, setDebtSortIndex] = useState(0);
 
-      // Assignee Filter
-      const assignedList = d.assigned_user_ids || [d.created_by_user_id || d.assigned_to_user_id || "user-1"];
-      const matchesAssignee = assigneeFilter === "all" || assignedList.includes(assigneeFilter);
+  const debtControls = useDataControls<Debt>({
+    data: store.debts,
+    searchFields: ["counterparty", "note"],
+    searchPredicate: (item, q) =>
+      item.counterparty.toLowerCase().includes(q) ||
+      (item.note ? item.note.toLowerCase().includes(q) : false),
+    initialSort: debtSortOptions[0].rules,
+    initialPageSize: 10,
+  });
 
-      return matchesSearch && matchesType && matchesStatus && matchesAssignee;
-    });
-  }, [store.debts, searchQuery, typeFilter, statusFilter, assigneeFilter]);
+  // Data Controls for Debt Payments (Riwayat Cicilan & Pelunasan)
+  const payFilterConfigs = useMemo<FilterConfig<(typeof store.debtPayments)[0]>[]>(() => {
+    return [
+      {
+        id: "wallet_id",
+        label: "Wallet",
+        type: "select",
+        options: store.wallets.map((w) => ({ label: w.name, value: w.id })),
+      },
+      {
+        id: "recorded_by",
+        label: "Diinput Oleh",
+        type: "select",
+        options: users.map((u) => ({ label: u.name, value: u.id })),
+      },
+      {
+        id: "status",
+        label: "Status Payment",
+        type: "select",
+        options: [
+          { label: "Aktif", value: "active" },
+          { label: "Void", value: "void" },
+        ],
+      },
+    ];
+  }, [store.wallets, users]);
+
+  const paySortOptions = useMemo(() => {
+    return [
+      { label: "Tanggal Terbaru", rules: [{ field: "date", order: "desc" as const }] },
+      { label: "Tanggal Terlama", rules: [{ field: "date", order: "asc" as const }] },
+      { label: "Nominal Terbesar", rules: [{ field: "amount", order: "desc" as const }] },
+    ];
+  }, []);
+
+  const [paySortIndex, setPaySortIndex] = useState(0);
+
+  const payControls = useDataControls({
+    data: store.debtPayments,
+    searchFields: ["date"],
+    initialSort: paySortOptions[0].rules,
+    initialPageSize: 10,
+  });
 
   const activeDebtForPayment = store.debts.find((d) => d.id === selectedDebtId);
 
@@ -254,54 +327,23 @@ export default function DebtsReceivablesPage() {
 
       {/* Tidy & Compact Filter Bar with Add Button */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-card border border-border/60 p-4 rounded-xl shadow-2xs">
-        <div className="flex flex-wrap items-center gap-2.5 flex-1">
-          <div className="relative min-w-[220px] flex-1 sm:flex-initial">
-            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input
-              placeholder="Cari counterparty / catatan..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 text-xs h-9"
-            />
-          </div>
-
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="text-xs h-9 w-[150px]">
-              <SelectValue placeholder="Tipe" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Tipe</SelectItem>
-              <SelectItem value="utang">Utang (Kewajiban)</SelectItem>
-              <SelectItem value="piutang">Piutang (Tagihan)</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="text-xs h-9 w-[140px]">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Status</SelectItem>
-              <SelectItem value="belum_lunas">Belum Dibayar</SelectItem>
-              <SelectItem value="cicilan">Cicilan</SelectItem>
-              <SelectItem value="lunas">Lunas</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
-            <SelectTrigger className="text-xs h-9 w-[160px]">
-              <SelectValue placeholder="Penanggung Jawab" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Anggota</SelectItem>
-              {users.map((u) => (
-                <SelectItem key={u.id} value={u.id}>
-                  {u.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <DataTableToolbar
+          className="flex-1"
+          searchQuery={debtControls.searchQuery}
+          onSearchChange={debtControls.setSearchQuery}
+          searchPlaceholder="Cari pihak kedua atau catatan..."
+          filterConfigs={debtFilterConfigs}
+          filters={debtControls.filters}
+          onFilterChange={debtControls.setFilter}
+          onClearFilters={debtControls.clearAllFilters}
+          activeFilterCount={debtControls.activeFilterCount}
+          sortOptions={debtSortOptions}
+          currentSortIndex={debtSortIndex}
+          onSortChange={(idx) => {
+            setDebtSortIndex(idx);
+            debtControls.setSortRules(debtSortOptions[idx].rules);
+          }}
+        />
 
         <Button onClick={handleOpenCreate} className="gap-2 shrink-0 h-9 text-xs">
           <PlusIcon className="size-4" />
@@ -319,32 +361,45 @@ export default function DebtsReceivablesPage() {
             </CardDescription>
           </div>
           <Badge variant="outline" className="text-xs">
-            {filteredDebts.length} Records
+            {debtControls.totalItems} Records
           </Badge>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Tipe</TableHead>
-                <TableHead>Pihak Kedua (Counterparty)</TableHead>
-                <TableHead>Penanggung Jawab / Member</TableHead>
-                <TableHead className="text-right">Pokok Awal</TableHead>
-                <TableHead className="text-right">Progress Pelunasan</TableHead>
-                <TableHead>Jatuh Tempo</TableHead>
-                <TableHead className="text-center">Status</TableHead>
-                <TableHead className="text-center">Aksi</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredDebts.length === 0 ? (
+        <CardContent className="space-y-4">
+          {store.simulatedError ? (
+            <ErrorState onRetry={() => store.setSimulatedError(false)} />
+          ) : store.simulatedLoading ? (
+            <DataTableSkeleton rows={5} cols={8} />
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-sm">
-                    Tidak ada pencatatan utang atau piutang yang cocok dengan filter.
-                  </TableCell>
+                  <TableHead>Tipe</TableHead>
+                  <TableHead>Pihak Kedua (Counterparty)</TableHead>
+                  <TableHead>Penanggung Jawab / Member</TableHead>
+                  <TableHead className="text-right">Pokok Awal</TableHead>
+                  <TableHead className="text-right">Progress Pelunasan</TableHead>
+                  <TableHead>Jatuh Tempo</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="text-center">Aksi</TableHead>
                 </TableRow>
-              ) : (
-                filteredDebts.map((debt) => {
+              </TableHeader>
+              <TableBody>
+                {debtControls.paginatedData.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="p-0">
+                      <EmptyState
+                        icon={HandshakeIcon}
+                        title="Tidak Ada Utang / Piutang"
+                        description="Belum ada pencatatan tagihan utang atau pinjaman piutang."
+                        isFiltered={debtControls.activeFilterCount > 0 || debtControls.searchQuery.trim() !== ""}
+                        onReset={debtControls.clearAllFilters}
+                        actionLabel="Catat Utang / Piutang"
+                        onAction={handleOpenCreate}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                debtControls.paginatedData.map((debt) => {
                   const creatorId = debt.created_by_user_id || debt.assigned_to_user_id || "user-1";
                   const assignedUserIds = debt.assigned_user_ids || [creatorId];
                   const canEdit = activeUser.id === creatorId || store.activeRole === "admin";
@@ -529,6 +584,15 @@ export default function DebtsReceivablesPage() {
               )}
             </TableBody>
           </Table>
+          )}
+
+          <DataPagination
+            page={debtControls.page}
+            totalPages={debtControls.totalPages}
+            totalItems={debtControls.totalItems}
+            pageSize={debtControls.pageSize}
+            onPageChange={debtControls.setPage}
+          />
         </CardContent>
       </Card>
 
@@ -798,13 +862,32 @@ export default function DebtsReceivablesPage() {
 
       {/* Payment History Card */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Riwayat Cicilan & Pelunasan (`DEBT_PAYMENTS`)</CardTitle>
-          <CardDescription className="text-xs">
-            Log histori seluruh transaksi pembayaran utang dan penerimaan piutang.
-          </CardDescription>
+        <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b">
+          <div>
+            <CardTitle className="text-lg">Riwayat Cicilan & Pelunasan (`DEBT_PAYMENTS`)</CardTitle>
+            <CardDescription className="text-xs">
+              Log histori seluruh transaksi pembayaran utang dan penerimaan piutang.
+            </CardDescription>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-4 space-y-4">
+          <DataTableToolbar
+            searchQuery={payControls.searchQuery}
+            onSearchChange={payControls.setSearchQuery}
+            searchPlaceholder="Cari riwayat cicilan berdasarkan tanggal..."
+            filterConfigs={payFilterConfigs}
+            filters={payControls.filters}
+            onFilterChange={payControls.setFilter}
+            onClearFilters={payControls.clearAllFilters}
+            activeFilterCount={payControls.activeFilterCount}
+            sortOptions={paySortOptions}
+            currentSortIndex={paySortIndex}
+            onSortChange={(idx) => {
+              setPaySortIndex(idx);
+              payControls.setSortRules(paySortOptions[idx].rules);
+            }}
+          />
+
           <Table>
             <TableHeader>
               <TableRow>
@@ -817,20 +900,21 @@ export default function DebtsReceivablesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {store.debtPayments.length === 0 ? (
+              {payControls.paginatedData.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-6 text-muted-foreground text-xs">
-                    Belum ada riwayat cicilan.
+                    Belum ada riwayat cicilan yang sesuai.
                   </TableCell>
                 </TableRow>
               ) : (
-                store.debtPayments.map((dp) => {
+                payControls.paginatedData.map((dp) => {
                   const debt = store.debts.find((d) => d.id === dp.debt_id);
                   const wallet = store.wallets.find((w) => w.id === dp.wallet_id);
                   const recorder = store.users.find((u) => u.id === dp.recorded_by);
+                  const isVoid = dp.status === "void";
 
                   return (
-                    <TableRow key={dp.id}>
+                    <TableRow key={dp.id} className={isVoid ? "opacity-40 bg-muted/20 line-through" : ""}>
                       <TableCell className="font-mono text-xs">{dp.date}</TableCell>
                       <TableCell className="font-medium text-xs">
                         {debt ? (
@@ -846,20 +930,21 @@ export default function DebtsReceivablesPage() {
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{wallet?.name || "-"}</TableCell>
                       <TableCell className="text-xs">{recorder?.name || "-"}</TableCell>
-                      <TableCell className="text-right font-semibold text-sm font-mono text-emerald-600">
+                      <TableCell className="text-right font-semibold font-mono text-xs">
                         Rp {dp.amount.toLocaleString("id-ID")}
                       </TableCell>
                       <TableCell className="text-center">
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          className="h-6 text-[11px] text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 gap-1"
-                          onClick={() => store.deleteDebtPayment(dp.id)}
-                          title="Batal / Hapus Pembayaran Ini"
-                        >
-                          <XCircleIcon className="size-3.5" />
-                          Batal
-                        </Button>
+                        {!isVoid && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                            onClick={() => store.deleteDebtPayment(dp.id)}
+                          >
+                            <XCircleIcon className="size-3.5 mr-1" />
+                            Void
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
@@ -867,6 +952,14 @@ export default function DebtsReceivablesPage() {
               )}
             </TableBody>
           </Table>
+
+          <DataPagination
+            page={payControls.page}
+            totalPages={payControls.totalPages}
+            totalItems={payControls.totalItems}
+            pageSize={payControls.pageSize}
+            onPageChange={payControls.setPage}
+          />
         </CardContent>
       </Card>
 

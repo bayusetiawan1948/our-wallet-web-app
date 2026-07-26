@@ -1,5 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useMockStore } from "@/lib/mock-store";
+import { useDataControls, type FilterConfig } from "@/hooks/use-data-controls";
+import { DataTableToolbar } from "@/components/common/data-table-toolbar";
+import { DataPagination } from "@/components/common/data-table-pagination";
+import { EmptyState } from "@/components/common/empty-state";
+import { CardGridSkeleton } from "@/components/common/loading-skeleton";
+import { ErrorState } from "@/components/common/error-state";
 import {
   TargetIcon,
   PlusIcon,
@@ -28,7 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { BudgetPeriod } from "@/types";
+import type { BudgetPeriod, Budget } from "@/types";
 
 export default function BudgetsPage() {
   const store = useMockStore();
@@ -39,6 +45,39 @@ export default function BudgetsPage() {
   const [budName, setBudName] = useState<string>("");
   const [budTarget, setBudTarget] = useState<string>("");
   const [budPeriod, setBudPeriod] = useState<BudgetPeriod>("monthly");
+
+  // Data Controls for Budgets
+  const budgetFilterConfigs = useMemo<FilterConfig<Budget>[]>(() => {
+    return [
+      {
+        id: "period",
+        label: "Periode",
+        type: "select",
+        options: [
+          { label: "Mingguan", value: "weekly" },
+          { label: "Bulanan", value: "monthly" },
+          { label: "Tahunan", value: "yearly" },
+        ],
+      },
+    ];
+  }, []);
+
+  const budgetSortOptions = useMemo(() => {
+    return [
+      { label: "Target Terbesar", rules: [{ field: "target_amount", order: "desc" as const }] },
+      { label: "Target Terkecil", rules: [{ field: "target_amount", order: "asc" as const }] },
+      { label: "Nama (A - Z)", rules: [{ field: "name", order: "asc" as const }] },
+    ];
+  }, []);
+
+  const [budgetSortIndex, setBudgetSortIndex] = useState(0);
+
+  const budgetControls = useDataControls<Budget>({
+    data: store.budgets,
+    searchFields: ["name"],
+    initialSort: budgetSortOptions[0].rules,
+    initialPageSize: 10,
+  });
 
   const handleAddBudget = (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,81 +193,126 @@ export default function BudgetsPage() {
         </Dialog>
       </div>
 
+      {/* Filter Toolbar */}
+      <div className="bg-card border border-border/60 p-4 rounded-xl shadow-2xs">
+        <DataTableToolbar
+          searchQuery={budgetControls.searchQuery}
+          onSearchChange={budgetControls.setSearchQuery}
+          searchPlaceholder="Cari nama budget..."
+          filterConfigs={budgetFilterConfigs}
+          filters={budgetControls.filters}
+          onFilterChange={budgetControls.setFilter}
+          onClearFilters={budgetControls.clearAllFilters}
+          activeFilterCount={budgetControls.activeFilterCount}
+          sortOptions={budgetSortOptions}
+          currentSortIndex={budgetSortIndex}
+          onSortChange={(idx) => {
+            setBudgetSortIndex(idx);
+            budgetControls.setSortRules(budgetSortOptions[idx].rules);
+          }}
+        />
+      </div>
+
       {/* Budgets Cards List */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {store.budgets.map((budget) => {
-          const category = store.categories.find((c) => c.id === budget.category_id);
+      {store.simulatedError ? (
+        <ErrorState onRetry={() => store.setSimulatedError(false)} />
+      ) : store.simulatedLoading ? (
+        <CardGridSkeleton count={3} />
+      ) : budgetControls.paginatedData.length === 0 ? (
+        <EmptyState
+          icon={TargetIcon}
+          title="Tidak Ada Budget"
+          description="Belum ada perencanaan batasan anggaran pengeluaran yang terdaftar."
+          isFiltered={budgetControls.activeFilterCount > 0 || budgetControls.searchQuery.trim() !== ""}
+          onReset={budgetControls.clearAllFilters}
+          actionLabel="Buat Budget Baru"
+          onAction={() => setIsAddOpen(true)}
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {budgetControls.paginatedData.map((budget) => {
+            const category = store.categories.find((c) => c.id === budget.category_id);
 
-          const spent = store.transactions
-            .filter((t) => t.category_id === budget.category_id && t.type === "expense" && t.status === "active")
-            .reduce((sum, t) => sum + t.amount, 0);
+            const spent = store.transactions
+              .filter((t) => t.category_id === budget.category_id && t.type === "expense" && t.status === "active")
+              .reduce((sum, t) => sum + t.amount, 0);
 
-          const remaining = budget.target_amount - spent;
-          const pct = Math.min(100, Math.round((spent / budget.target_amount) * 100));
-          const isOver = spent > budget.target_amount;
-          const isWarning = pct >= 80 && !isOver;
+            const remaining = budget.target_amount - spent;
+            const pct = Math.min(100, Math.round((spent / budget.target_amount) * 100));
+            const isOver = spent > budget.target_amount;
+            const isWarning = pct >= 80 && !isOver;
 
-          return (
-            <Card key={budget.id} className="relative overflow-hidden border-border/60">
-              <div className={`absolute top-0 left-0 right-0 h-1.5 ${isOver ? "bg-rose-500" : isWarning ? "bg-amber-500" : "bg-emerald-500"}`} />
-              <CardHeader className="flex flex-row items-start justify-between pb-2">
-                <div>
-                  <CardTitle className="text-base font-semibold">{budget.name}</CardTitle>
-                  <CardDescription>Kategori: {category?.name || "-"}</CardDescription>
-                </div>
-                <Badge variant="outline" className="text-xs uppercase">
-                  {budget.period}
-                </Badge>
-              </CardHeader>
+            return (
+              <Card key={budget.id} className="relative overflow-hidden border-border/60">
+                <div className={`absolute top-0 left-0 right-0 h-1.5 ${isOver ? "bg-rose-500" : isWarning ? "bg-amber-500" : "bg-emerald-500"}`} />
+                <CardHeader className="flex flex-row items-start justify-between pb-2">
+                  <div>
+                    <CardTitle className="text-base font-semibold">{budget.name}</CardTitle>
+                    <CardDescription>Kategori: {category?.name || "-"}</CardDescription>
+                  </div>
+                  <Badge variant="outline" className="text-xs uppercase">
+                    {budget.period}
+                  </Badge>
+                </CardHeader>
 
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between items-baseline text-xs">
-                    <span className="text-muted-foreground">Terpakai:</span>
-                    <span className="font-bold font-mono text-sm">
-                      Rp {spent.toLocaleString("id-ID")}{" "}
-                      <span className="font-normal text-muted-foreground text-xs">/ Rp {budget.target_amount.toLocaleString("id-ID")}</span>
-                    </span>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-baseline text-xs">
+                      <span className="text-muted-foreground">Terpakai:</span>
+                      <span className="font-bold font-mono text-sm">
+                        Rp {spent.toLocaleString("id-ID")}{" "}
+                        <span className="font-normal text-muted-foreground text-xs">/ Rp {budget.target_amount.toLocaleString("id-ID")}</span>
+                      </span>
+                    </div>
+
+                    <Progress value={pct} className={`h-2.5 ${isOver ? "[&>div]:bg-rose-500" : isWarning ? "[&>div]:bg-amber-500" : "[&>div]:bg-emerald-500"}`} />
+
+                    <div className="flex justify-between items-center text-xs pt-1">
+                      <span className="font-semibold">{pct}% Terpakai</span>
+                      {isOver ? (
+                        <span className="text-rose-600 font-bold flex items-center gap-1">
+                          <WarningIcon className="size-3.5" /> OVER Rp {Math.abs(remaining).toLocaleString("id-ID")}
+                        </span>
+                      ) : (
+                        <span className="text-emerald-600 font-medium">
+                          Sisa: Rp {remaining.toLocaleString("id-ID")}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  <Progress value={pct} className={`h-2.5 ${isOver ? "[&>div]:bg-rose-500" : isWarning ? "[&>div]:bg-amber-500" : "[&>div]:bg-emerald-500"}`} />
-
-                  <div className="flex justify-between items-center text-xs pt-1">
-                    <span className="font-semibold">{pct}% Terpakai</span>
+                  {/* Status Indicator */}
+                  <div className="pt-2 border-t border-border/40 text-xs flex items-center justify-between">
+                    <span className="text-muted-foreground">Status Anggaran</span>
                     {isOver ? (
-                      <span className="text-rose-600 font-bold flex items-center gap-1">
-                        <WarningIcon className="size-3.5" /> OVER Rp {Math.abs(remaining).toLocaleString("id-ID")}
-                      </span>
+                      <Badge variant="destructive" className="text-[10px] gap-1">
+                        <WarningIcon className="size-3" /> OVERBUDGET
+                      </Badge>
+                    ) : isWarning ? (
+                      <Badge variant="outline" className="text-[10px] gap-1 text-amber-600 border-amber-500/40 bg-amber-500/10">
+                        <WarningIcon className="size-3" /> Mendekati Batas
+                      </Badge>
                     ) : (
-                      <span className="text-emerald-600 font-medium">
-                        Sisa: Rp {remaining.toLocaleString("id-ID")}
-                      </span>
+                      <Badge variant="secondary" className="text-[10px] gap-1 text-emerald-600 border-emerald-500/30 bg-emerald-500/10">
+                        <CheckCircleIcon className="size-3" /> Aman
+                      </Badge>
                     )}
                   </div>
-                </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
-                {/* Status Indicator */}
-                <div className="pt-2 border-t border-border/40 text-xs flex items-center justify-between">
-                  <span className="text-muted-foreground">Status Anggaran</span>
-                  {isOver ? (
-                    <Badge variant="destructive" className="text-[10px] gap-1">
-                      <WarningIcon className="size-3" /> OVERBUDGET
-                    </Badge>
-                  ) : isWarning ? (
-                    <Badge variant="outline" className="text-[10px] gap-1 text-amber-600 border-amber-500/40 bg-amber-500/10">
-                      <WarningIcon className="size-3" /> Mendekati Batas
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary" className="text-[10px] gap-1 text-emerald-600 border-emerald-500/30 bg-emerald-500/10">
-                      <CheckCircleIcon className="size-3" /> Aman
-                    </Badge>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      <DataPagination
+        page={budgetControls.page}
+        totalPages={budgetControls.totalPages}
+        totalItems={budgetControls.totalItems}
+        pageSize={budgetControls.pageSize}
+        onPageChange={budgetControls.setPage}
+      />
     </div>
   );
 }
+

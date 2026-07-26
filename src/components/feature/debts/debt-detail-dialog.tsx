@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { EmptyState } from "@/components/common/empty-state";
 import {
   ArrowUpRightIcon,
   ArrowDownLeftIcon,
@@ -385,8 +386,12 @@ export const DebtDetailDialog: React.FC<DebtDetailDialogProps> = ({
                 <TableBody>
                   {payments.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center py-6 text-xs text-muted-foreground">
-                        Belum ada riwayat cicilan / pembayaran yang dicatat.
+                      <TableCell colSpan={4} className="p-0">
+                        <EmptyState
+                          icon={ReceiptIcon}
+                          title="Belum Ada Pembayaran"
+                          description="Belum ada riwayat cicilan atau pelunasan yang dicatat untuk utang/piutang ini."
+                        />
                       </TableCell>
                     </TableRow>
                   ) : (

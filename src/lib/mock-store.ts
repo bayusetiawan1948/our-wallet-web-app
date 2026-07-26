@@ -245,6 +245,18 @@ class Store {
   valuations: InvestmentValuation[] = INITIAL_VALUATIONS;
   budgets: Budget[] = INITIAL_BUDGETS;
   auditLogs: AuditLog[] = INITIAL_AUDIT_LOGS;
+  simulatedLoading: boolean = false;
+  simulatedError: boolean = false;
+
+  setSimulatedLoading(val: boolean) {
+    this.simulatedLoading = val;
+    emitChange();
+  }
+
+  setSimulatedError(val: boolean) {
+    this.simulatedError = val;
+    emitChange();
+  }
 
   getActiveUser(): User {
     return this.activeRole === "admin"

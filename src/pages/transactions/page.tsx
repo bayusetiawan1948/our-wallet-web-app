@@ -1,5 +1,11 @@
 import React, { useState, useMemo } from "react";
 import { useMockStore } from "@/lib/mock-store";
+import { useDataControls, type FilterConfig } from "@/hooks/use-data-controls";
+import { DataTableToolbar } from "@/components/common/data-table-toolbar";
+import { DataPagination } from "@/components/common/data-table-pagination";
+import { EmptyState } from "@/components/common/empty-state";
+import { DataTableSkeleton } from "@/components/common/loading-skeleton";
+import { ErrorState } from "@/components/common/error-state";
 import {
   ArrowsDownUpIcon,
   PlusIcon,
@@ -135,9 +141,95 @@ export default function TransactionsPage() {
   };
 
   // Filter transactions based on role
-  const filteredTransactions = store.transactions.filter((tx) => {
-    if (store.activeRole === "admin") return true;
-    return accessibleWallets.some((w) => w.id === tx.wallet_id) || tx.owner_id === activeUser.id;
+  const rawFilteredTransactions = useMemo(() => {
+    return store.transactions.filter((tx) => {
+      if (store.activeRole === "admin") return true;
+      return accessibleWallets.some((w) => w.id === tx.wallet_id) || tx.owner_id === activeUser.id;
+    });
+  }, [store.transactions, store.activeRole, accessibleWallets, activeUser.id]);
+
+  // Data Controls for Transactions Tab
+  const txFilterConfigs = useMemo<FilterConfig<(typeof store.transactions)[0]>[]>(() => {
+    return [
+      {
+        id: "type",
+        label: "Tipe Transaksi",
+        type: "select",
+        options: [
+          { label: "Pengeluaran (Expense)", value: "expense" },
+          { label: "Pemasukan (Income)", value: "income" },
+        ],
+      },
+      {
+        id: "wallet_id",
+        label: "Wallet",
+        type: "select",
+        options: store.wallets.map((w) => ({ label: w.name, value: w.id })),
+      },
+      {
+        id: "category_id",
+        label: "Kategori",
+        type: "select",
+        options: store.categories.map((c) => ({ label: c.name, value: c.id })),
+      },
+      {
+        id: "status",
+        label: "Status Transaksi",
+        type: "select",
+        options: [
+          { label: "Aktif", value: "active" },
+          { label: "Void / Dibatalkan", value: "void" },
+        ],
+      },
+    ];
+  }, [store.wallets, store.categories]);
+
+  const txSortOptions = useMemo(() => {
+    return [
+      {
+        label: "Tanggal Terbaru",
+        rules: [{ field: "date", order: "desc" as const }],
+      },
+      {
+        label: "Tanggal Terlama",
+        rules: [{ field: "date", order: "asc" as const }],
+      },
+      {
+        label: "Nominal Terbesar",
+        rules: [{ field: "amount", order: "desc" as const }],
+      },
+      {
+        label: "Nominal Terkecil",
+        rules: [{ field: "amount", order: "asc" as const }],
+      },
+    ];
+  }, []);
+
+  const [txSortIndex, setTxSortIndex] = useState(0);
+
+  const txControls = useDataControls({
+    data: rawFilteredTransactions,
+    searchFields: ["note", "date"],
+    initialSort: txSortOptions[0].rules,
+    initialPageSize: 10,
+  });
+
+  // Data Controls for Transfers Tab
+  const trSortOptions = useMemo(() => {
+    return [
+      { label: "Tanggal Terbaru", rules: [{ field: "date", order: "desc" as const }] },
+      { label: "Tanggal Terlama", rules: [{ field: "date", order: "asc" as const }] },
+      { label: "Nominal Terbesar", rules: [{ field: "amount", order: "desc" as const }] },
+    ];
+  }, []);
+
+  const [trSortIndex, setTrSortIndex] = useState(0);
+
+  const trControls = useDataControls({
+    data: store.transfers,
+    searchFields: ["note", "date"],
+    initialSort: trSortOptions[0].rules,
+    initialPageSize: 10,
   });
 
   return (
@@ -416,11 +508,11 @@ export default function TransactionsPage() {
         <TabsList className="grid w-full grid-cols-3 max-w-xl">
           <TabsTrigger value="transactions" className="gap-2">
             <ReceiptIcon className="size-4" />
-            Riwayat Transaksi ({filteredTransactions.length})
+            Riwayat Transaksi ({txControls.totalItems})
           </TabsTrigger>
           <TabsTrigger value="transfers" className="gap-2">
             <SwapIcon className="size-4" />
-            Transfer Dana ({store.transfers.length})
+            Transfer Dana ({trControls.totalItems})
           </TabsTrigger>
           <TabsTrigger value="categories" className="gap-2">
             <TagIcon className="size-4" />
@@ -429,9 +521,9 @@ export default function TransactionsPage() {
         </TabsList>
 
         {/* Tab 1: Transactions Table */}
-        <TabsContent value="transactions" className="pt-4">
+        <TabsContent value="transactions" className="pt-4 space-y-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b">
               <div>
                 <CardTitle className="text-lg">Transaksi Pemasukan & Pengeluaran</CardTitle>
                 <CardDescription>
@@ -439,29 +531,59 @@ export default function TransactionsPage() {
                 </CardDescription>
               </div>
             </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Tanggal</TableHead>
-                    <TableHead>Tipe & Status</TableHead>
-                    <TableHead>Kategori</TableHead>
-                    <TableHead>Wallet</TableHead>
-                    <TableHead>Pemilik / Inputer</TableHead>
-                    <TableHead>Catatan</TableHead>
-                    <TableHead className="text-right">Nominal</TableHead>
-                    <TableHead className="text-center">Aksi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredTransactions.length === 0 ? (
+            <CardContent className="pt-4 space-y-4">
+              <DataTableToolbar
+                searchQuery={txControls.searchQuery}
+                onSearchChange={txControls.setSearchQuery}
+                searchPlaceholder="Cari transaksi berdasarkan catatan..."
+                filterConfigs={txFilterConfigs}
+                filters={txControls.filters}
+                onFilterChange={txControls.setFilter}
+                onClearFilters={txControls.clearAllFilters}
+                activeFilterCount={txControls.activeFilterCount}
+                sortOptions={txSortOptions}
+                currentSortIndex={txSortIndex}
+                onSortChange={(idx) => {
+                  setTxSortIndex(idx);
+                  txControls.setSortRules(txSortOptions[idx].rules);
+                }}
+              />
+
+              {store.simulatedError ? (
+                <ErrorState onRetry={() => store.setSimulatedError(false)} />
+              ) : store.simulatedLoading ? (
+                <DataTableSkeleton rows={5} cols={8} />
+              ) : (
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
-                        Belum ada transaksi.
-                      </TableCell>
+                      <TableHead>Tanggal</TableHead>
+                      <TableHead>Tipe & Status</TableHead>
+                      <TableHead>Kategori</TableHead>
+                      <TableHead>Wallet</TableHead>
+                      <TableHead>Pemilik / Inputer</TableHead>
+                      <TableHead>Catatan</TableHead>
+                      <TableHead className="text-right">Nominal</TableHead>
+                      <TableHead className="text-center">Aksi</TableHead>
                     </TableRow>
-                  ) : (
-                    filteredTransactions.map((tx) => {
+                  </TableHeader>
+                  <TableBody>
+                    {txControls.paginatedData.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="p-0">
+                          <EmptyState
+                            icon={ReceiptIcon}
+                            title="Tidak Ada Transaksi"
+                            description="Belum ada transaksi pengeluaran atau pemasukan yang tercatat."
+                            isFiltered={txControls.activeFilterCount > 0 || txControls.searchQuery.trim() !== ""}
+                            onReset={txControls.clearAllFilters}
+                            actionLabel="Catat Transaksi"
+                            onAction={() => setIsTxOpen(true)}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                    txControls.paginatedData.map((tx) => {
                       const wallet = store.wallets.find((w) => w.id === tx.wallet_id);
                       const category = store.categories.find((c) => c.id === tx.category_id);
                       const owner = store.users.find((u) => u.id === tx.owner_id);
@@ -520,20 +642,45 @@ export default function TransactionsPage() {
                   )}
                 </TableBody>
               </Table>
+              )}
+
+              <DataPagination
+                page={txControls.page}
+                totalPages={txControls.totalPages}
+                totalItems={txControls.totalItems}
+                pageSize={txControls.pageSize}
+                onPageChange={txControls.setPage}
+              />
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Tab 2: Transfers Table */}
-        <TabsContent value="transfers" className="pt-4">
+        <TabsContent value="transfers" className="pt-4 space-y-4">
           <Card>
-            <CardHeader>
+            <CardHeader className="border-b pb-3">
               <CardTitle className="text-lg">Riwayat Transfer Antar Wallet</CardTitle>
               <CardDescription>
                 Pencatatan mutasi internal saldo yang tidak memengaruhi total pendapatan/pengeluaran household.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-4 space-y-4">
+              <DataTableToolbar
+                searchQuery={trControls.searchQuery}
+                onSearchChange={trControls.setSearchQuery}
+                searchPlaceholder="Cari transfer berdasarkan catatan..."
+                filters={trControls.filters}
+                onFilterChange={trControls.setFilter}
+                onClearFilters={trControls.clearAllFilters}
+                activeFilterCount={trControls.activeFilterCount}
+                sortOptions={trSortOptions}
+                currentSortIndex={trSortIndex}
+                onSortChange={(idx) => {
+                  setTrSortIndex(idx);
+                  trControls.setSortRules(trSortOptions[idx].rules);
+                }}
+              />
+
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -547,14 +694,14 @@ export default function TransactionsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {store.transfers.length === 0 ? (
+                  {trControls.paginatedData.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
-                        Belum ada transfer dana.
+                        Belum ada transfer dana yang sesuai.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    store.transfers.map((tr) => {
+                    trControls.paginatedData.map((tr) => {
                       const fromW = store.wallets.find((w) => w.id === tr.from_wallet_id);
                       const toW = store.wallets.find((w) => w.id === tr.to_wallet_id);
                       const isVoid = tr.status === "void";
@@ -594,6 +741,14 @@ export default function TransactionsPage() {
                   )}
                 </TableBody>
               </Table>
+
+              <DataPagination
+                page={trControls.page}
+                totalPages={trControls.totalPages}
+                totalItems={trControls.totalItems}
+                pageSize={trControls.pageSize}
+                onPageChange={trControls.setPage}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -606,3 +761,4 @@ export default function TransactionsPage() {
     </div>
   );
 }
+
