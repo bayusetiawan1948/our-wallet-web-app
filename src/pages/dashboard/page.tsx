@@ -14,7 +14,9 @@ import {
   type DatePresetKey,
   type DashboardSummaryCard,
 } from "@/components/feature/dashboard";
+import { formatRupiah } from "@/libs/number";
 import { WalletIcon, MoneyIcon, CreditCardIcon, ChartLineUpIcon } from "@phosphor-icons/react";
+
 
 export default function Page() {
   const store = useMockStore();
@@ -81,7 +83,7 @@ export default function Page() {
     {
       id: "net-worth",
       title: "NET WORTH",
-      value: `Rp ${netWorth.toLocaleString("id-ID")}`,
+      value: formatRupiah(netWorth),
       trend: "+12.4% vs month",
       isPositive: true,
       icon: WalletIcon,
@@ -89,7 +91,7 @@ export default function Page() {
     {
       id: "total-assets",
       title: "TOTAL ASSETS",
-      value: `Rp ${totalAssets.toLocaleString("id-ID")}`,
+      value: formatRupiah(totalAssets),
       trend: "+8.2% vs month",
       isPositive: true,
       icon: MoneyIcon,
@@ -97,7 +99,7 @@ export default function Page() {
     {
       id: "liabilities",
       title: "LIABILITIES",
-      value: `Rp ${totalLiabilities.toLocaleString("id-ID")}`,
+      value: formatRupiah(totalLiabilities),
       trend: "-4.5% vs month",
       isPositive: true,
       icon: CreditCardIcon,

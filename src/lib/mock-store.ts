@@ -17,9 +17,17 @@ import type {
   DebtType,
   DebtPayment,
   Investment,
+  AssetType,
   InvestmentTransaction,
   InvestmentValuation,
   Budget,
+  BudgetPeriod,
+  BudgetPeriodRecord,
+  Goal,
+  GoalStatus,
+  Reservation,
+  AllocationMethod,
+  BudgetEncroachment,
   AuditLog,
 } from "@/types";
 
@@ -196,6 +204,91 @@ const INITIAL_BUDGETS: Budget[] = [
   { id: "b-3", category_id: "cat-5", owner_household_id: "household-1", name: "Budget Belanja Bulanan Supermarket", target_amount: 4000000, period: "monthly", start_date: "2026-07-01" },
 ];
 
+const INITIAL_BUDGET_PERIODS: BudgetPeriodRecord[] = [
+  {
+    id: "bp-1",
+    budget_id: "b-1",
+    period_start: "2026-07-01",
+    period_end: "2026-07-31",
+    target_amount: 3500000,
+    carried_deficit: 0,
+    status: "active",
+  },
+  {
+    id: "bp-2",
+    budget_id: "b-2",
+    period_start: "2026-07-01",
+    period_end: "2026-07-31",
+    target_amount: 2000000,
+    carried_deficit: 150000,
+    status: "active",
+  },
+  {
+    id: "bp-3",
+    budget_id: "b-3",
+    period_start: "2026-07-01",
+    period_end: "2026-07-31",
+    target_amount: 4000000,
+    carried_deficit: 0,
+    status: "active",
+  },
+];
+
+const INITIAL_GOALS: Goal[] = [
+  {
+    id: "g-1",
+    owner_household_id: "household-1",
+    name: "Dana Darurat 6 Bulan",
+    target_amount: 50000000,
+    target_date: "2027-12-31",
+    status: "active",
+    notes: "Pengumpulan cadangan kas keluarga 6 kali pengeluaran bulanan",
+  },
+  {
+    id: "g-2",
+    owner_household_id: "household-1",
+    name: "DP Rumah Pertama",
+    target_amount: 100000000,
+    target_date: "2028-06-30",
+    status: "active",
+    notes: "Target uang muka hunian keluarga",
+  },
+  {
+    id: "g-3",
+    owner_user_id: "user-1",
+    name: "Upgrade Laptop Workstation",
+    target_amount: 25000000,
+    target_date: "2026-11-30",
+    status: "active",
+    notes: "Untuk kebutuhan kerja freelance Bayu",
+  },
+];
+
+const INITIAL_RESERVATIONS: Reservation[] = [
+  { id: "res-1", wallet_id: "w-1", budget_id: "b-1", reserved_amount: 2000000, allocation_method: "manual" },
+  { id: "res-2", wallet_id: "w-1", budget_id: "b-2", reserved_amount: 1000000, allocation_method: "manual" },
+  { id: "res-3", wallet_id: "w-1", goal_id: "g-1", reserved_amount: 10000000, allocation_method: "manual" },
+  { id: "res-4", wallet_id: "w-1", goal_id: "g-3", reserved_amount: 8000000, allocation_method: "manual" },
+  { id: "res-5", wallet_id: "w-2", budget_id: "b-1", reserved_amount: 1000000, allocation_method: "manual" },
+  { id: "res-6", wallet_id: "w-3", budget_id: "b-3", reserved_amount: 2500000, allocation_method: "manual" },
+  { id: "res-7", wallet_id: "w-3", goal_id: "g-1", reserved_amount: 3000000, allocation_method: "manual" },
+  { id: "res-8", wallet_id: "w-4", budget_id: "b-2", reserved_amount: 1000000, allocation_method: "manual" },
+  { id: "res-9", wallet_id: "w-4", budget_id: "b-3", reserved_amount: 1500000, allocation_method: "manual" },
+  { id: "res-10", wallet_id: "w-4", goal_id: "g-2", reserved_amount: 8000000, allocation_method: "manual" },
+];
+
+const INITIAL_ENCROACHMENTS: BudgetEncroachment[] = [
+  {
+    id: "enc-1",
+    transaction_id: "tx-3",
+    wallet_id: "w-3",
+    budget_id: "b-1",
+    amount: 250000,
+    created_at: "2026-07-10 19:30:00",
+    note: "Defisit saldo bebas Mandiri Annisa terserap oleh Budget Kuliner",
+  },
+];
+
 const INITIAL_AUDIT_LOGS: AuditLog[] = [
   {
     id: "log-1",
@@ -244,6 +337,10 @@ class Store {
   investmentTransactions: InvestmentTransaction[] = INITIAL_INVESTMENT_TRANSACTIONS;
   valuations: InvestmentValuation[] = INITIAL_VALUATIONS;
   budgets: Budget[] = INITIAL_BUDGETS;
+  budgetPeriods: BudgetPeriodRecord[] = INITIAL_BUDGET_PERIODS;
+  goals: Goal[] = INITIAL_GOALS;
+  reservations: Reservation[] = INITIAL_RESERVATIONS;
+  encroachments: BudgetEncroachment[] = INITIAL_ENCROACHMENTS;
   auditLogs: AuditLog[] = INITIAL_AUDIT_LOGS;
   simulatedLoading: boolean = false;
   simulatedError: boolean = false;
@@ -998,13 +1095,6 @@ class Store {
     emitChange();
   }
 
-  addBudget(budget: Budget) {
-    this.budgets = [...this.budgets, budget];
-    this.logAudit("CREATE_BUDGET", "BUDGETS", budget.id, `Membuat budget ${budget.name} target Rp ${budget.target_amount.toLocaleString("id-ID")}`);
-    toast.success(`Budget ${budget.name} berhasil dibuat!`);
-    emitChange();
-  }
-
   updateInvestmentValuation(investmentId: string, newPrice: number) {
     const inv = this.investments.find((i) => i.id === investmentId);
     if (!inv) return;
@@ -1021,6 +1111,56 @@ class Store {
     this.logAudit("UPDATE_VALUATION", "INVESTMENT_VALUATIONS", investmentId, `Update harga pasar ${inv.asset_name} ke Rp ${newPrice.toLocaleString("id-ID")} per ${inv.unit}`);
     toast.success(`Harga pasar ${inv.asset_name} diperbarui!`);
     emitChange();
+  }
+
+  addInvestment(data: {
+    asset_name: string;
+    asset_type: AssetType;
+    unit: string;
+    initial_price?: number;
+    ownerType?: "user" | "household";
+  }) {
+    if (this.activeRole !== "admin") {
+      toast.error("Hanya Admin yang dapat membuat aset investasi baru!");
+      return false;
+    }
+
+    if (!data.asset_name.trim()) {
+      toast.error("Nama aset tidak boleh kosong!");
+      return false;
+    }
+
+    const activeUser = this.getActiveUser();
+    const ownerUserId = data.ownerType === "user" ? activeUser.id : undefined;
+    const ownerHouseholdId = data.ownerType !== "user" ? "household-1" : undefined;
+    const investmentId = `inv-${Date.now()}`;
+
+    const newInv: Investment = {
+      id: investmentId,
+      asset_name: data.asset_name.trim(),
+      asset_type: data.asset_type,
+      unit: data.unit.trim() || "unit",
+      owner_user_id: ownerUserId,
+      owner_household_id: ownerHouseholdId,
+    };
+
+    this.investments = [...this.investments, newInv];
+
+    if (data.initial_price && data.initial_price > 0) {
+      const newValuation: InvestmentValuation = {
+        id: `val-${Date.now()}`,
+        investment_id: investmentId,
+        price_per_unit: data.initial_price,
+        date: new Date().toISOString().split("T")[0],
+        source: "manual",
+      };
+      this.valuations = [newValuation, ...this.valuations];
+    }
+
+    this.logAudit("CREATE_INVESTMENT", "INVESTMENTS", investmentId, `Menambahkan aset investasi baru "${newInv.asset_name}" (${newInv.asset_type})`);
+    toast.success(`Aset investasi "${newInv.asset_name}" berhasil dibuat!`);
+    emitChange();
+    return true;
   }
 
   addInvestmentTransaction(investmentId: string, walletId: string, type: "buy" | "sell", quantity: number, price: number, date: string) {
@@ -1203,6 +1343,482 @@ class Store {
     toast.success(`Kategori "${category.name}" berhasil dihapus!`);
     emitChange();
     return true;
+  }
+
+  // Budget & Goal Domain Methods
+  getWalletBalanceBreakdown(walletId: string) {
+    const wallet = this.wallets.find((w) => w.id === walletId);
+    const totalBalance = wallet ? wallet.balance : 0;
+    const walletReservations = this.reservations.filter((r) => r.wallet_id === walletId);
+    const reservedBalance = walletReservations.reduce((sum, r) => sum + r.reserved_amount, 0);
+    const freeBalance = totalBalance - reservedBalance;
+
+    return {
+      wallet,
+      totalBalance,
+      reservedBalance,
+      freeBalance,
+      reservations: walletReservations,
+    };
+  }
+
+  getBudgetProgress(budgetId: string) {
+    const budget = this.budgets.find((b) => b.id === budgetId);
+    if (!budget) return null;
+
+    const periodRecord = this.budgetPeriods.find((bp) => bp.budget_id === budgetId && bp.status === "active");
+    const carriedDeficit = periodRecord ? periodRecord.carried_deficit : 0;
+    const effectiveTarget = budget.target_amount + carriedDeficit;
+
+    const spentAmount = this.transactions
+      .filter((t) => t.category_id === budget.category_id && t.type === "expense" && t.status === "active")
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const budgetReservations = this.reservations.filter((r) => r.budget_id === budgetId);
+    const totalReserved = budgetReservations.reduce((sum, r) => sum + r.reserved_amount, 0);
+
+    return {
+      budget,
+      periodRecord,
+      carriedDeficit,
+      baseTarget: budget.target_amount,
+      effectiveTarget,
+      spentAmount,
+      totalReserved,
+      remainingBudget: Math.max(0, effectiveTarget - spentAmount),
+      deficitAmount: Math.max(0, spentAmount - effectiveTarget),
+      isOverbudget: spentAmount > effectiveTarget,
+      reservations: budgetReservations,
+    };
+  }
+
+  getGoalProgress(goalId: string) {
+    const goal = this.goals.find((g) => g.id === goalId);
+    if (!goal) return null;
+
+    const goalReservations = this.reservations.filter((r) => r.goal_id === goalId);
+    const totalReserved = goalReservations.reduce((sum, r) => sum + r.reserved_amount, 0);
+    const progressPercent = Math.min(100, Math.round((totalReserved / (goal.target_amount || 1)) * 100));
+
+    return {
+      goal,
+      totalReserved,
+      progressPercent,
+      remainingAmount: Math.max(0, goal.target_amount - totalReserved),
+      isCompleted: totalReserved >= goal.target_amount || goal.status === "completed",
+      reservations: goalReservations,
+    };
+  }
+
+  addBudget(data: {
+    name: string;
+    category_id: string;
+    target_amount: number;
+    period: BudgetPeriod;
+    ownerType?: "user" | "household";
+    reservations?: Array<{
+      wallet_id: string;
+      reserved_amount: number;
+      allocation_method: AllocationMethod;
+      allocation_config?: { percentage?: number; formula?: string };
+    }>;
+  }) {
+    if (this.activeRole !== "admin") {
+      toast.error("Hanya Admin yang dapat membuat budget baru!");
+      return false;
+    }
+
+    const budgetId = `b-${Date.now()}`;
+    const activeUser = this.getActiveUser();
+    const ownerUserId = data.ownerType === "user" ? activeUser.id : undefined;
+    const ownerHouseholdId = data.ownerType !== "user" ? "household-1" : undefined;
+
+    const newBudget: Budget = {
+      id: budgetId,
+      category_id: data.category_id,
+      name: data.name,
+      target_amount: data.target_amount,
+      period: data.period,
+      start_date: new Date().toISOString().split("T")[0],
+      owner_user_id: ownerUserId,
+      owner_household_id: ownerHouseholdId,
+    };
+
+    const newPeriod: BudgetPeriodRecord = {
+      id: `bp-${Date.now()}`,
+      budget_id: budgetId,
+      period_start: new Date().toISOString().split("T")[0],
+      period_end: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
+      target_amount: data.target_amount,
+      carried_deficit: 0,
+      status: "active",
+    };
+
+    const newReservations: Reservation[] = (data.reservations || []).map((r, idx) => ({
+      id: `res-${Date.now()}-${idx}`,
+      wallet_id: r.wallet_id,
+      budget_id: budgetId,
+      reserved_amount: r.reserved_amount,
+      allocation_method: r.allocation_method,
+      allocation_config: r.allocation_config || null,
+    }));
+
+    this.budgets = [...this.budgets, newBudget];
+    this.budgetPeriods = [...this.budgetPeriods, newPeriod];
+    this.reservations = [...this.reservations, ...newReservations];
+
+    this.logAudit("CREATE_BUDGET", "BUDGETS", budgetId, `Membuat budget baru "${data.name}" Rp ${data.target_amount.toLocaleString("id-ID")}`);
+    toast.success(`Budget "${data.name}" berhasil dibuat!`);
+    emitChange();
+    return true;
+  }
+
+  updateBudget(
+    budgetId: string,
+    data: {
+      name: string;
+      category_id: string;
+      target_amount: number;
+      period: BudgetPeriod;
+      reservations?: Array<{
+        wallet_id: string;
+        reserved_amount: number;
+        allocation_method: AllocationMethod;
+        allocation_config?: { percentage?: number; formula?: string };
+      }>;
+    }
+  ) {
+    if (this.activeRole !== "admin") {
+      toast.error("Hanya Admin yang dapat mengubah budget!");
+      return false;
+    }
+
+    const budget = this.budgets.find((b) => b.id === budgetId);
+    if (!budget) return false;
+
+    this.budgets = this.budgets.map((b) =>
+      b.id === budgetId ? { ...b, name: data.name, category_id: data.category_id, target_amount: data.target_amount, period: data.period } : b
+    );
+
+    if (data.reservations) {
+      // Hapus reservasi budget lama dan ganti dengan yang baru
+      this.reservations = this.reservations.filter((r) => r.budget_id !== budgetId);
+      const newReservations: Reservation[] = data.reservations.map((r, idx) => ({
+        id: `res-${Date.now()}-${idx}`,
+        wallet_id: r.wallet_id,
+        budget_id: budgetId,
+        reserved_amount: r.reserved_amount,
+        allocation_method: r.allocation_method,
+        allocation_config: r.allocation_config || null,
+      }));
+      this.reservations = [...this.reservations, ...newReservations];
+    }
+
+    this.logAudit("UPDATE_BUDGET", "BUDGETS", budgetId, `Mengedit budget "${data.name}"`);
+    toast.success(`Budget "${data.name}" berhasil diperbarui!`);
+    emitChange();
+    return true;
+  }
+
+  deleteBudget(budgetId: string) {
+    if (this.activeRole !== "admin") {
+      toast.error("Hanya Admin yang dapat menghapus budget!");
+      return false;
+    }
+
+    const budget = this.budgets.find((b) => b.id === budgetId);
+    if (!budget) return false;
+
+    this.budgets = this.budgets.filter((b) => b.id !== budgetId);
+    this.budgetPeriods = this.budgetPeriods.filter((bp) => bp.budget_id !== budgetId);
+    this.reservations = this.reservations.filter((r) => r.budget_id !== budgetId);
+
+    this.logAudit("DELETE_BUDGET", "BUDGETS", budgetId, `Menghapus budget "${budget.name}"`);
+    toast.success(`Budget "${budget.name}" berhasil dihapus!`);
+    emitChange();
+    return true;
+  }
+
+  closeBudgetPeriod(budgetId: string) {
+    const budgetProgress = this.getBudgetProgress(budgetId);
+    if (!budgetProgress) return false;
+
+    const { budget, deficitAmount } = budgetProgress;
+
+    // Tutup periode lama
+    this.budgetPeriods = this.budgetPeriods.map((bp) =>
+      bp.budget_id === budgetId && bp.status === "active" ? { ...bp, status: "closed" } : bp
+    );
+
+    // Buat periode baru dengan carried deficit
+    const newPeriod: BudgetPeriodRecord = {
+      id: `bp-${Date.now()}`,
+      budget_id: budgetId,
+      period_start: new Date().toISOString().split("T")[0],
+      period_end: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
+      target_amount: budget.target_amount,
+      carried_deficit: deficitAmount,
+      status: "active",
+    };
+
+    this.budgetPeriods = [...this.budgetPeriods, newPeriod];
+
+    if (deficitAmount > 0) {
+      toast.warning(`Periode Budget "${budget.name}" Ditutup`, {
+        description: `Defisit sebesar Rp ${deficitAmount.toLocaleString("id-ID")} berhasil dibawa (carried forward) ke periode berikutnya.`,
+      });
+    } else {
+      toast.success(`Periode Budget "${budget.name}" Berhasil Ditutup & Direset!`);
+    }
+
+    this.logAudit("CLOSE_BUDGET_PERIOD", "BUDGET_PERIODS", newPeriod.id, `Menutup periode budget "${budget.name}". Defisit terbawa: Rp ${deficitAmount.toLocaleString("id-ID")}`);
+    emitChange();
+    return true;
+  }
+
+  addGoal(data: {
+    name: string;
+    target_amount: number;
+    target_date?: string;
+    notes?: string;
+    ownerType?: "user" | "household";
+    reservations?: Array<{
+      wallet_id: string;
+      reserved_amount: number;
+      allocation_method: AllocationMethod;
+      allocation_config?: { percentage?: number; formula?: string };
+    }>;
+  }) {
+    if (this.activeRole !== "admin") {
+      toast.error("Hanya Admin yang dapat membuat goal baru!");
+      return false;
+    }
+
+    const goalId = `g-${Date.now()}`;
+    const activeUser = this.getActiveUser();
+    const ownerUserId = data.ownerType === "user" ? activeUser.id : undefined;
+    const ownerHouseholdId = data.ownerType !== "user" ? "household-1" : undefined;
+
+    const newGoal: Goal = {
+      id: goalId,
+      name: data.name,
+      target_amount: data.target_amount,
+      target_date: data.target_date || null,
+      status: "active",
+      notes: data.notes || "",
+      owner_user_id: ownerUserId,
+      owner_household_id: ownerHouseholdId,
+    };
+
+    const newReservations: Reservation[] = (data.reservations || []).map((r, idx) => ({
+      id: `res-${Date.now()}-${idx}`,
+      wallet_id: r.wallet_id,
+      goal_id: goalId,
+      reserved_amount: r.reserved_amount,
+      allocation_method: r.allocation_method,
+      allocation_config: r.allocation_config || null,
+    }));
+
+    this.goals = [...this.goals, newGoal];
+    this.reservations = [...this.reservations, ...newReservations];
+
+    this.logAudit("CREATE_GOAL", "GOALS", goalId, `Membuat goal financial "${data.name}" target Rp ${data.target_amount.toLocaleString("id-ID")}`);
+    toast.success(`Financial Goal "${data.name}" berhasil dibuat!`);
+    emitChange();
+    return true;
+  }
+
+  updateGoal(
+    goalId: string,
+    data: {
+      name: string;
+      target_amount: number;
+      target_date?: string;
+      status?: GoalStatus;
+      notes?: string;
+      reservations?: Array<{
+        wallet_id: string;
+        reserved_amount: number;
+        allocation_method: AllocationMethod;
+        allocation_config?: { percentage?: number; formula?: string };
+      }>;
+    }
+  ) {
+    if (this.activeRole !== "admin") {
+      toast.error("Hanya Admin yang dapat mengubah goal!");
+      return false;
+    }
+
+    const goal = this.goals.find((g) => g.id === goalId);
+    if (!goal) return false;
+
+    this.goals = this.goals.map((g) =>
+      g.id === goalId
+        ? {
+            ...g,
+            name: data.name,
+            target_amount: data.target_amount,
+            target_date: data.target_date || g.target_date,
+            status: data.status || g.status,
+            notes: data.notes !== undefined ? data.notes : g.notes,
+          }
+        : g
+    );
+
+    if (data.reservations) {
+      this.reservations = this.reservations.filter((r) => r.goal_id !== goalId);
+      const newReservations: Reservation[] = data.reservations.map((r, idx) => ({
+        id: `res-${Date.now()}-${idx}`,
+        wallet_id: r.wallet_id,
+        goal_id: goalId,
+        reserved_amount: r.reserved_amount,
+        allocation_method: r.allocation_method,
+        allocation_config: r.allocation_config || null,
+      }));
+      this.reservations = [...this.reservations, ...newReservations];
+    }
+
+    this.logAudit("UPDATE_GOAL", "GOALS", goalId, `Mengedit goal "${data.name}"`);
+    toast.success(`Goal "${data.name}" berhasil diperbarui!`);
+    emitChange();
+    return true;
+  }
+
+  deleteGoal(goalId: string) {
+    if (this.activeRole !== "admin") {
+      toast.error("Hanya Admin yang dapat menghapus goal!");
+      return false;
+    }
+
+    const goal = this.goals.find((g) => g.id === goalId);
+    if (!goal) return false;
+
+    this.goals = this.goals.filter((g) => g.id !== goalId);
+    this.reservations = this.reservations.filter((r) => r.goal_id !== goalId);
+
+    this.logAudit("DELETE_GOAL", "GOALS", goalId, `Menghapus goal "${goal.name}"`);
+    toast.success(`Goal "${goal.name}" berhasil dihapus!`);
+    emitChange();
+    return true;
+  }
+
+  addTransactionWithEncroachmentCheck(
+    txData: Omit<Transaction, "id" | "recorded_by" | "status">,
+    encroachmentAllocations?: Array<{ budget_id?: string; goal_id?: string; amount: number }>
+  ): {
+    success: boolean;
+    requiresEncroachment: boolean;
+    shortfall?: number;
+    wallet?: Wallet;
+    reservations?: Reservation[];
+  } {
+    const activeUser = this.getActiveUser();
+    const breakdown = this.getWalletBalanceBreakdown(txData.wallet_id);
+
+    if (!breakdown.wallet) {
+      toast.error("Wallet tidak ditemukan");
+      return { success: false, requiresEncroachment: false };
+    }
+
+    // Cek jika pengeluaran melebihi Saldo Bebas (Free Balance)
+    if (txData.type === "expense") {
+      const freeBalanceAfterTx = breakdown.freeBalance - txData.amount;
+
+      if (freeBalanceAfterTx < 0) {
+        const shortfall = Math.abs(freeBalanceAfterTx);
+
+        // Jika belum ada alokasi encroachment yang disubmit, minta user melakukan atribusi
+        if (!encroachmentAllocations || encroachmentAllocations.length === 0) {
+          toast.warning(`⚠️ WARNING ENCROACHMENT SALDO BEBAS!`, {
+            description: `Pengeluaran Rp ${txData.amount.toLocaleString("id-ID")} melebihi Saldo Bebas dompet "${breakdown.wallet.name}" (Rp ${breakdown.freeBalance.toLocaleString("id-ID")}). Anda wajib memilih atribusi encroachment reservasi.`,
+            duration: 5000,
+          });
+
+          return {
+            success: false,
+            requiresEncroachment: true,
+            shortfall,
+            wallet: breakdown.wallet,
+            reservations: breakdown.reservations,
+          };
+        }
+
+        // Verifikasi total split atribusi encroachment harus persis sama dengan shortfall
+        const totalAllocated = encroachmentAllocations.reduce((sum, item) => sum + item.amount, 0);
+        if (totalAllocated !== shortfall) {
+          toast.error("⚠️ ATRIBUSI ENCROACHMENT TIDAK MATCH!", {
+            description: `Total split atribusi (Rp ${totalAllocated.toLocaleString("id-ID")}) harus persis sama dengan defisit Saldo Bebas (Rp ${shortfall.toLocaleString("id-ID")}).`,
+          });
+          return {
+            success: false,
+            requiresEncroachment: true,
+            shortfall,
+            wallet: breakdown.wallet,
+            reservations: breakdown.reservations,
+          };
+        }
+      }
+    }
+
+    // Catat Transaksi Utama
+    const txId = `tx-${Date.now()}`;
+    const newTx: Transaction = {
+      ...txData,
+      id: txId,
+      recorded_by: activeUser.id,
+      status: "active",
+    };
+
+    // Update Saldo Total Wallet
+    const balanceDiff = txData.type === "income" ? txData.amount : -txData.amount;
+    this.wallets = this.wallets.map((w) =>
+      w.id === txData.wallet_id ? { ...w, balance: w.balance + balanceDiff } : w
+    );
+    this.transactions = [newTx, ...this.transactions];
+
+    // Jika ada alokasi Encroachment, potong reserved_amount dari reservasi dan catat ke BUDGET_ENCROACHMENTS
+    if (encroachmentAllocations && encroachmentAllocations.length > 0) {
+      const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
+
+      encroachmentAllocations.forEach((alloc, index) => {
+        if (alloc.amount <= 0) return;
+
+        // Potong nilai reserved_amount pada reservasi terkait
+        this.reservations = this.reservations.map((r) => {
+          if (r.wallet_id === txData.wallet_id) {
+            if (alloc.budget_id && r.budget_id === alloc.budget_id) {
+              return { ...r, reserved_amount: Math.max(0, r.reserved_amount - alloc.amount) };
+            }
+            if (alloc.goal_id && r.goal_id === alloc.goal_id) {
+              return { ...r, reserved_amount: Math.max(0, r.reserved_amount - alloc.amount) };
+            }
+          }
+          return r;
+        });
+
+        // Tambah log encroachment
+        const newEncroachment: BudgetEncroachment = {
+          id: `enc-${Date.now()}-${index}`,
+          transaction_id: txId,
+          wallet_id: txData.wallet_id,
+          budget_id: alloc.budget_id || null,
+          goal_id: alloc.goal_id || null,
+          amount: alloc.amount,
+          created_at: nowStr,
+          note: `Atribusi Encroachment transaksi ${newTx.note || ""} (Rp ${alloc.amount.toLocaleString("id-ID")})`,
+        };
+        this.encroachments = [newEncroachment, ...this.encroachments];
+      });
+
+      toast.warning(`⚠️ ENCROACHMENT DICATAT!`, {
+        description: `Saldo reservasi telah dikurangi sejumlah Rp ${encroachmentAllocations.reduce((a, b) => a + b.amount, 0).toLocaleString("id-ID")} untuk menutupi defisit saldo bebas dompet "${breakdown.wallet.name}".`,
+      });
+    }
+
+    this.logAudit("CREATE_TRANSACTION", "TRANSACTIONS", newTx.id, `Mencatat ${txData.type === "income" ? "pemasukan" : "pengeluaran"} Rp ${txData.amount.toLocaleString("id-ID")} di ${breakdown.wallet.name}`);
+    toast.success(`Transaksi berhasil dicatat pada ${breakdown.wallet.name}`);
+    emitChange();
+    return { success: true, requiresEncroachment: false };
   }
 }
 

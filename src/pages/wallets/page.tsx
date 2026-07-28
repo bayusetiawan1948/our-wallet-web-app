@@ -19,7 +19,10 @@ import {
   InfoIcon,
   DotsThreeVerticalIcon,
 } from "@phosphor-icons/react";
+import { CurrencyInput } from "@/components/ui/currency-input";
+import { formatRupiah } from "@/libs/number";
 import { Button } from "@/components/ui/button";
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -309,13 +312,11 @@ export default function WalletsPage() {
                     )}
 
                     <div className="grid gap-2">
-                      <Label htmlFor="initialBal">Saldo Awal (Rp)</Label>
-                      <Input
+                      <Label htmlFor="initialBal">Saldo Awal</Label>
+                      <CurrencyInput
                         id="initialBal"
-                        type="number"
-                        min="0"
                         value={newInitialBalance}
-                        onChange={(e) => setNewInitialBalance(e.target.value)}
+                        onValueChange={(num) => setNewInitialBalance(num.toString())}
                         required
                       />
                       <p className="text-[11px] text-muted-foreground flex items-center gap-1">
@@ -561,12 +562,49 @@ export default function WalletsPage() {
                 </CardHeader>
 
                 <CardContent className="space-y-3">
-                  <div>
-                    <div className="text-xs text-muted-foreground">Saldo Catatan</div>
-                    <div className="text-xl font-bold font-mono tracking-tight text-foreground">
-                      Rp {w.balance.toLocaleString("id-ID")}
-                    </div>
-                  </div>
+                  {(() => {
+                    const breakdown = store.getWalletBalanceBreakdown(w.id);
+                    return (
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">Saldo Total</div>
+                            <div className="text-lg font-bold font-mono tracking-tight text-foreground">
+                              {formatRupiah(breakdown.totalBalance)}
+                            </div>
+                          </div>
+                          <Badge
+                            variant={breakdown.freeBalance < 0 ? "destructive" : "outline"}
+                            className="text-[10px] font-mono"
+                          >
+                            {breakdown.freeBalance < 0 ? "Bebas Minus" : "Saldo Safe"}
+                          </Badge>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border/50 text-xs">
+                          <div className="p-2 rounded-md bg-muted/40 space-y-0.5">
+                            <span className="text-[10px] text-muted-foreground block">Terpesan (Reserved)</span>
+                            <span className="font-mono font-semibold text-amber-600 dark:text-amber-400 block">
+                              {formatRupiah(breakdown.reservedBalance)}
+                            </span>
+                          </div>
+
+                          <div className="p-2 rounded-md bg-muted/40 space-y-0.5">
+                            <span className="text-[10px] text-muted-foreground block">Saldo Bebas (Free)</span>
+                            <span
+                              className={`font-mono font-semibold block ${
+                                breakdown.freeBalance < 0
+                                  ? "text-destructive"
+                                  : "text-emerald-600 dark:text-emerald-400"
+                              }`}
+                            >
+                              {formatRupiah(breakdown.freeBalance)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs">
                     <Dialog>
@@ -597,16 +635,15 @@ export default function WalletsPage() {
                             <div className="p-3 bg-muted/40 rounded-lg text-xs space-y-1">
                               <div className="text-muted-foreground">Saldo Tercatat Sekarang:</div>
                               <div className="text-base font-bold font-mono">
-                                Rp {w.balance.toLocaleString("id-ID")}
+                                {formatRupiah(w.balance)}
                               </div>
                             </div>
 
                             <div className="grid gap-2">
-                              <Label>Saldo Aktual Fisik (Rp)</Label>
-                              <Input
-                                type="number"
+                              <Label>Saldo Aktual Fisik</Label>
+                              <CurrencyInput
                                 value={actualBalanceInput}
-                                onChange={(e) => setActualBalanceInput(e.target.value)}
+                                onValueChange={(num) => setActualBalanceInput(num.toString())}
                                 required
                               />
                             </div>

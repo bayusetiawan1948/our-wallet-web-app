@@ -19,7 +19,12 @@ import {
 } from "@phosphor-icons/react";
 import { CategoryManagement } from "@/components/feature/categories/category-management";
 import { ImportTransactionsDialog } from "@/components/feature/transactions/import-transactions-dialog";
+import { EncroachmentDialog } from "@/components/feature/budgets/encroachment-dialog";
+import type { Wallet, Reservation, Transaction } from "@/types";
+import { CurrencyInput } from "@/components/ui/currency-input";
+import { formatRupiah } from "@/libs/number";
 import { Button } from "@/components/ui/button";
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -65,6 +70,13 @@ export default function TransactionsPage() {
   const [txDate, setTxDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [txNote, setTxNote] = useState<string>("");
 
+  // Encroachment Modal State
+  const [encroachmentOpen, setEncroachmentOpen] = useState(false);
+  const [encroachmentShortfall, setEncroachmentShortfall] = useState(0);
+  const [encroachmentWallet, setEncroachmentWallet] = useState<Wallet | null>(null);
+  const [encroachmentReservations, setEncroachmentReservations] = useState<Reservation[]>([]);
+  const [pendingTxData, setPendingTxData] = useState<Omit<Transaction, "id" | "recorded_by" | "status"> | null>(null);
+
   // New Transfer Form State
   const [trFromWalletId, setTrFromWalletId] = useState<string>(accessibleWallets[0]?.id || "");
   const [trToWalletId, setTrToWalletId] = useState<string>(
@@ -107,7 +119,7 @@ export default function TransactionsPage() {
     e.preventDefault();
     if (!txWalletId || !effectiveCategoryId || numTxAmount <= 0) return;
 
-    const success = store.addTransaction({
+    const txData = {
       wallet_id: txWalletId,
       category_id: effectiveCategoryId,
       owner_id: activeUser.id,
@@ -115,11 +127,35 @@ export default function TransactionsPage() {
       amount: numTxAmount,
       date: txDate,
       note: txNote,
-    });
+    };
 
-    if (success) {
+    const res = store.addTransactionWithEncroachmentCheck(txData);
+
+    if (res.requiresEncroachment) {
+      setPendingTxData(txData);
+      setEncroachmentShortfall(res.shortfall || 0);
+      setEncroachmentWallet(res.wallet || null);
+      setEncroachmentReservations(res.reservations || []);
+      setEncroachmentOpen(true);
+      return;
+    }
+
+    if (res.success) {
       setTxAmount("");
       setTxNote("");
+      setIsTxOpen(false);
+    }
+  };
+
+  const handleConfirmEncroachment = (allocations: Array<{ budget_id?: string; goal_id?: string; amount: number }>) => {
+    if (!pendingTxData) return;
+
+    const res = store.addTransactionWithEncroachmentCheck(pendingTxData, allocations);
+    if (res.success) {
+      setTxAmount("");
+      setTxNote("");
+      setPendingTxData(null);
+      setEncroachmentOpen(false);
       setIsTxOpen(false);
     }
   };
@@ -363,13 +399,12 @@ export default function TransactionsPage() {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="grid gap-1.5">
-                        <Label className="text-xs font-medium">Jumlah Nominal (Rp)</Label>
-                        <Input
-                          type="number"
-                          placeholder="Contoh: 150000"
+                        <Label className="text-xs font-medium">Jumlah Nominal</Label>
+                        <CurrencyInput
+                          placeholder="0"
                           className="h-9"
                           value={txAmount}
-                          onChange={(e) => setTxAmount(e.target.value)}
+                          onValueChange={(num) => setTxAmount(num.toString())}
                           required
                         />
                       </div>
@@ -444,25 +479,23 @@ export default function TransactionsPage() {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="grid gap-1.5">
-                        <Label className="text-xs font-medium">Jumlah Nominal (Rp)</Label>
-                        <Input
-                          type="number"
-                          placeholder="1000000"
+                        <Label className="text-xs font-medium">Jumlah Nominal</Label>
+                        <CurrencyInput
+                          placeholder="0"
                           className="h-9"
                           value={trAmount}
-                          onChange={(e) => setTrAmount(e.target.value)}
+                          onValueChange={(num) => setTrAmount(num.toString())}
                           required
                         />
                       </div>
 
                       <div className="grid gap-1.5">
-                        <Label className="text-xs font-medium">Biaya Transfer (Rp)</Label>
-                        <Input
-                          type="number"
+                        <Label className="text-xs font-medium">Biaya Transfer</Label>
+                        <CurrencyInput
                           placeholder="0"
                           className="h-9"
                           value={trFee}
-                          onChange={(e) => setTrFee(e.target.value)}
+                          onValueChange={(num) => setTrFee(num.toString())}
                         />
                       </div>
                     </div>
@@ -621,7 +654,7 @@ export default function TransactionsPage() {
                           </TableCell>
                           <TableCell className="text-xs max-w-[200px] truncate">{tx.note || "-"}</TableCell>
                           <TableCell className={`text-right font-semibold text-sm ${tx.type === "income" ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`}>
-                            {tx.type === "income" ? "+" : "-"} Rp {tx.amount.toLocaleString("id-ID")}
+                            {tx.type === "income" ? "+" : "-"} {formatRupiah(tx.amount)}
                           </TableCell>
                           <TableCell className="text-center">
                             {!isVoid && (
@@ -712,10 +745,10 @@ export default function TransactionsPage() {
                           <TableCell className="font-medium text-xs">{fromW?.name}</TableCell>
                           <TableCell className="font-medium text-xs text-primary">{toW?.name}</TableCell>
                           <TableCell className="text-right font-semibold text-sm">
-                            Rp {tr.amount.toLocaleString("id-ID")}
+                            {formatRupiah(tr.amount)}
                           </TableCell>
                           <TableCell className="text-right text-xs text-muted-foreground">
-                            {tr.fee > 0 ? `Rp ${tr.fee.toLocaleString("id-ID")}` : "Gratis"}
+                            {tr.fee > 0 ? formatRupiah(tr.fee) : "Gratis"}
                           </TableCell>
                           <TableCell className="text-xs">{tr.note || "-"}</TableCell>
                           <TableCell className="text-center">
@@ -758,6 +791,16 @@ export default function TransactionsPage() {
           <CategoryManagement />
         </TabsContent>
       </Tabs>
+
+      {/* Encroachment Dialog */}
+      <EncroachmentDialog
+        open={encroachmentOpen}
+        onOpenChange={setEncroachmentOpen}
+        shortfall={encroachmentShortfall}
+        wallet={encroachmentWallet}
+        reservations={encroachmentReservations}
+        onConfirm={handleConfirmEncroachment}
+      />
     </div>
   );
 }

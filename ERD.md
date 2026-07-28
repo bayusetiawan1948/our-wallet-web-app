@@ -1,20 +1,23 @@
-# ERD — Aplikasi Pencatatan Keuangan Keluarga (v2)
+# ERD — Aplikasi Pencatatan Keuangan Keluarga (v3)
 
 ## Konsep dasar
 
 - **Household** adalah unit keluarga yang menaungi beberapa `user`. Role hanya 2: **admin** (Kepala Keluarga, e.g. **Bayu**, kendali penuh) dan **member** (pasangan/anggota lain, e.g. **Annisa** — hanya bisa melihat data household terisolasi dan mencatat lewat wallet yang di-assign admin). `can_edit_others_transactions` adalah satu-satunya permission granular yang dibutuhkan saat ini (boleh/tidak edit transaksi milik member lain).
 - **Quick Role Switcher**: Disediakan switcher instan di header aplikasi (`Bayu (Admin)` vs `Annisa (Member)`) untuk pengujian prototype.
-- **Wallet**, **investasi**, **utang/piutang**, dan **budget** memakai pola ownership yang sama: `owner_user_id` atau `owner_household_id` — salah satu diisi, tidak dua-duanya (ditegakkan via check constraint).
+- **Wallet**, **investasi**, **utang/piutang**, **budget**, dan **goal** memakai pola ownership yang sama: `owner_user_id` atau `owner_household_id` — salah satu diisi, tidak dua-duanya (ditegakkan via check constraint).
 - Akses wallet shared hanya 1 level lewat `wallet_access` — begitu di-assign, member bisa melihat & mencatat di wallet tersebut.
 - **Kategori** milik household (dikelola admin), dan satu kategori bisa dipakai untuk income maupun expense — tipe transaksi ditentukan di `transactions.type`, bukan di kategori. Kategori sistem (`is_system`) tidak bisa dihapus, hanya disembunyikan (`is_hidden`).
 - **Transfer** antar wallet punya entity sendiri, terpisah dari `transactions`, supaya perpindahan saldo tidak tercatat ganda sebagai income+expense dan tidak merusak perhitungan net worth. Member dapat melakukan transfer dari wallet miliknya ke wallet mana saja di household.
-- **Overbudget & Insufficient Balance Warning**: Notifikasi visual (Toast Sonner + Warning Alert) langsung aktif apabila saldo dompet kurang atau pengeluaran melebihi budget bulanan kategori.
 - **`transactions.owner_id`** (siapa punya uangnya, untuk toggle mode Saya/Pasangan/Gabungan) dipisah dari **`transactions.recorded_by`** (siapa yang input) — penting karena satu orang bisa mencatat transaksi atas nama anggota lain.
 - **Void & koreksi** (bukan hard delete) berlaku di semua entity pergerakan uang: `transactions`, `transfers`, `debt_payments`, `investment_transactions` — masing-masing punya `status` (active/void) dan `correction_of_id` (self-reference ke record yang dikoreksi).
 - **Rekonsiliasi wallet** (`wallet_reconciliations`, cek manual saldo tercatat vs aktual kapan saja) dan **snapshot saldo** (`wallet_balance_snapshots`, otomatis tiap akhir bulan untuk grafik net worth) adalah dua konsep terpisah.
-- Investasi memisahkan riwayat transaksi beli/jual (`investment_transactions`, sekarang punya `wallet_id` sebagai sumber/tujuan dana) dari riwayat harga pasar (`investment_valuations`). Kolom `source` (manual/scrape/api) disiapkan dari awal untuk transisi ke integrasi otomatis nanti.
+- Investasi memisahkan riwayat transaksi beli/jual (`investment_transactions`, punya `wallet_id` sebagai sumber/tujuan dana) dari riwayat harga pasar (`investment_valuations`). Kolom `source` (manual/scrape/api) disiapkan dari awal untuk transisi ke integrasi otomatis nanti.
 - **Utang/piutang** digabung dalam satu tabel `debts` (kolom `type`), dengan split kepemilikan lewat 2 kolom tetap (`portion_admin`, `portion_member`) dan riwayat cicilan di `debt_payments`. Pembayaran oleh member hanya boleh dilakukan via wallet yang di-assign padanya.
-- **Budget** menyasar satu kategori per periode (mingguan/bulanan/tahunan), dengan ownership sama seperti wallet/investasi/utang.
+- **Budget** (recurring) menyasar satu kategori per periode (mingguan/bulanan/tahunan); tiap instance periode dicatat di `budget_periods`, termasuk defisit yang dibawa dari periode sebelumnya (`carried_deficit`) — defisit **tidak hangus** saat periode reset, ikut membebani target periode berikutnya.
+- **Goal** adalah entity terpisah dari Budget: dana terakumulasi menuju `target_amount` tanpa reset periodik, punya `target_date` opsional dan `status` (active/completed/cancelled) — dipakai untuk tujuan seperti dana nikah, beli rumah, dana darurat, dana sekolah anak.
+- **Reservasi dompet** (`reservations`) menghubungkan wallet ke budget/goal secara many-to-many — satu dompet bisa jadi penampung banyak budget/goal sekaligus, satu budget/goal bisa dipenuhi dari banyak dompet. `reserved_amount` mengurangi saldo dompet secara informational untuk menghasilkan "saldo bebas". Pengisian reservasi bisa `manual` (nominal tetap oleh user), `percentage` (persentase otomatis dari tiap income yang masuk ke dompet tsb), atau `formula` (disimpan generik di `allocation_config`, disiapkan untuk skema lebih kompleks nanti).
+- **Encroachment (soft-lock)**: reservasi bersifat informational — transaksi tetap bisa dijalankan meski saldo bebas dompet jadi minus (tidak ada hard block). Namun begitu itu terjadi, sistem **wajib** (bukan opsional) meminta user memilih budget/goal reservasi mana yang "termakan" (bisa lebih dari satu, dengan split nominal) sebelum transaksi tersimpan. Pilihan ini dicatat di `budget_encroachments`, dan `reserved_amount` pada reservasi terkait ikut berkurang sejumlah itu sebagai jejak riwayat (kenapa progress budget/goal turun bisa ditelusuri).
+- Warning (Toast Sonner + Alert) ditampilkan setiap kali encroachment terjadi, maupun saat saldo bebas dompet mendekati/melewati nol secara umum.
 - **Audit log** adalah tabel generik/polymorphic (`entity_type` + `entity_id`) yang mencatat semua perubahan lintas entity — bukan tabel audit terpisah per entity.
 - **Household invite** lewat kode/link (`household_invites`) untuk mengundang pasangan bergabung.
 
@@ -49,6 +52,16 @@ erDiagram
   CATEGORIES ||--o{ BUDGETS : targets
   USERS ||--o{ BUDGETS : owns
   HOUSEHOLDS ||--o{ BUDGETS : owns
+  BUDGETS ||--o{ BUDGET_PERIODS : has
+  USERS ||--o{ GOALS : owns
+  HOUSEHOLDS ||--o{ GOALS : owns
+  WALLETS ||--o{ RESERVATIONS : backs
+  BUDGETS ||--o{ RESERVATIONS : reserved_by
+  GOALS ||--o{ RESERVATIONS : reserved_by
+  TRANSACTIONS ||--o{ BUDGET_ENCROACHMENTS : causes
+  WALLETS ||--o{ BUDGET_ENCROACHMENTS : depletes_from
+  BUDGETS ||--o{ BUDGET_ENCROACHMENTS : encroached
+  GOALS ||--o{ BUDGET_ENCROACHMENTS : encroached
   USERS ||--o{ AUDIT_LOGS : performs
 
   USERS {
@@ -190,6 +203,42 @@ erDiagram
     decimal target_amount
     string period "weekly | monthly | yearly"
     date start_date
+  }
+  BUDGET_PERIODS {
+    uuid id PK
+    uuid budget_id FK
+    date period_start
+    date period_end
+    decimal target_amount "snapshot periode ini"
+    decimal carried_deficit "dibawa dari periode sebelumnya"
+    string status "active | closed"
+  }
+  GOALS {
+    uuid id PK
+    uuid owner_user_id FK "nullable, exclusive with owner_household_id"
+    uuid owner_household_id FK "nullable, exclusive with owner_user_id"
+    string name
+    decimal target_amount
+    date target_date "nullable"
+    string status "active | completed | cancelled"
+  }
+  RESERVATIONS {
+    uuid id PK
+    uuid wallet_id FK
+    uuid budget_id FK "nullable, exclusive with goal_id"
+    uuid goal_id FK "nullable, exclusive with budget_id"
+    decimal reserved_amount
+    string allocation_method "manual | percentage | formula"
+    json allocation_config "nullable, e.g. persentase atau formula"
+  }
+  BUDGET_ENCROACHMENTS {
+    uuid id PK
+    uuid transaction_id FK
+    uuid wallet_id FK
+    uuid budget_id FK "nullable, exclusive with goal_id"
+    uuid goal_id FK "nullable, exclusive with budget_id"
+    decimal amount
+    datetime created_at
   }
   AUDIT_LOGS {
     uuid id PK

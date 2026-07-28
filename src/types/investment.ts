@@ -1,6 +1,6 @@
 import { type RecordStatus } from "./transaction";
 
-export type AssetType = "emas" | "perak" | "crypto" | "saham";
+export type AssetType = "emas" | "perak" | "crypto" | "saham" | "reksadana" | "obligasi" | "lainnya";
 
 export interface Investment {
   id: string;

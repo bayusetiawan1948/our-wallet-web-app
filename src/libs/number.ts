@@ -151,4 +151,24 @@ export function formatCompactNumber(
   return `${prefixStr}${sign}${formattedValue}${spacing}${symbol}`;
 }
 
-export const formatShortRupiah = formatCompactNumber;
+export const formatShortRupiah = formatCompactNumber;
+
+/**
+ * Format string atau number ke format ribuan bertitik (contoh: 1500000 -> "1.500.000").
+ */
+export function formatCurrencyInput(val: string | number | undefined | null): string {
+  if (val === undefined || val === null || val === '') return '';
+  const digits = String(val).replace(/\D/g, '');
+  if (!digits) return '';
+  return new Intl.NumberFormat('id-ID').format(parseInt(digits, 10));
+}
+
+/**
+ * Parsing string format ribuan menjadi number murni (contoh: "1.500.000" -> 1500000).
+ */
+export function parseCurrencyInput(val: string | number | undefined | null): number {
+  if (val === undefined || val === null || val === '') return 0;
+  const digits = String(val).replace(/\D/g, '');
+  return digits ? parseInt(digits, 10) : 0;
+}
+

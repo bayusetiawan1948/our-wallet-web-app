@@ -66,18 +66,10 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 
-// Helpers for automatic currency formatting (e.g. 1500000 -> 1.500.000)
-function formatCurrencyString(val: string | number): string {
-  if (val === "" || val === undefined || val === null) return "";
-  const rawNum = typeof val === "number" ? val.toString() : val.replace(/\D/g, "");
-  if (!rawNum) return "";
-  return parseInt(rawNum, 10).toLocaleString("id-ID");
-}
+import { CurrencyInput } from "@/components/ui/currency-input";
+import { formatCurrencyInput as formatCurrencyString, parseCurrencyInput as parseCurrencyStringToNumber } from "@/libs/number";
 
-function parseCurrencyStringToNumber(val: string): number {
-  const clean = val.replace(/\D/g, "");
-  return clean ? parseInt(clean, 10) : 0;
-}
+
 
 export default function DebtsReceivablesPage() {
   const store = useMockStore();
@@ -668,11 +660,11 @@ export default function DebtsReceivablesPage() {
               </div>
 
               <div className="grid gap-2">
-                <Label>Nominal Pokok Awal (Rp)</Label>
-                <Input
-                  placeholder="Contoh: 1.500.000"
+                <Label>Nominal Pokok Awal</Label>
+                <CurrencyInput
+                  placeholder="1.500.000"
                   value={formPrincipalFormatted}
-                  onChange={(e) => setFormPrincipalFormatted(formatCurrencyString(e.target.value))}
+                  onValueChange={(_, formatted) => setFormPrincipalFormatted(formatted)}
                   required
                 />
               </div>
@@ -704,19 +696,19 @@ export default function DebtsReceivablesPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="grid gap-1.5">
-                        <Label className="text-xs">Porsi Bayu (Rp)</Label>
-                        <Input
+                        <Label className="text-xs">Porsi Bayu</Label>
+                        <CurrencyInput
                           placeholder="Porsi Bayu"
                           value={formPortionAdminFormatted}
-                          onChange={(e) => setFormPortionAdminFormatted(formatCurrencyString(e.target.value))}
+                          onValueChange={(_, formatted) => setFormPortionAdminFormatted(formatted)}
                         />
                       </div>
                       <div className="grid gap-1.5">
-                        <Label className="text-xs">Porsi Annisa (Rp)</Label>
-                        <Input
+                        <Label className="text-xs">Porsi Annisa</Label>
+                        <CurrencyInput
                           placeholder="Porsi Annisa"
                           value={formPortionMemberFormatted}
-                          onChange={(e) => setFormPortionMemberFormatted(formatCurrencyString(e.target.value))}
+                          onValueChange={(_, formatted) => setFormPortionMemberFormatted(formatted)}
                         />
                       </div>
                     </div>
@@ -811,11 +803,11 @@ export default function DebtsReceivablesPage() {
                 </div>
 
                 <div className="grid gap-2">
-                  <Label>Jumlah Nominal (Rp)</Label>
-                  <Input
-                    placeholder="Contoh: 500.000"
+                  <Label>Jumlah Nominal</Label>
+                  <CurrencyInput
+                    placeholder="500.000"
                     value={payAmountFormatted}
-                    onChange={(e) => setPayAmountFormatted(formatCurrencyString(e.target.value))}
+                    onValueChange={(_, formatted) => setPayAmountFormatted(formatted)}
                     required
                   />
                 </div>
