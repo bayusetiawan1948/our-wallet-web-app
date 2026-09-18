@@ -1,6 +1,11 @@
-import React, { useState, useMemo } from "react";
-import { useMockStore } from "@/lib/mock-store";
-import { type Debt, type DebtType } from "@/types";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { toast } from "sonner";
+import { useAuth } from "@/contexts/auth-context";
+import * as debtsService from "@/services/debts.service";
+import * as walletsService from "@/services/wallets.service";
+import * as householdsService from "@/services/households.service";
+import type { HouseholdMemberResponse } from "@/services/households.service";
+import { type Debt, type DebtPayment, type DebtType, type Wallet } from "@/types";
 import {
   HandshakeIcon,
   CheckCircleIcon,
@@ -11,11 +16,9 @@ import {
   PlusIcon,
   PencilIcon,
   TrashIcon,
-  UserIcon,
   XCircleIcon,
   UsersThreeIcon,
   EyeIcon,
-  UserCheckIcon,
 } from "@phosphor-icons/react";
 import { useDataControls, type FilterConfig } from "@/hooks/use-data-controls";
 import { DataTableToolbar } from "@/components/common/data-table-toolbar";
@@ -47,7 +50,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -69,23 +71,63 @@ import { Switch } from "@/components/ui/switch";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { formatCurrencyInput as formatCurrencyString, parseCurrencyInput as parseCurrencyStringToNumber } from "@/libs/number";
 
-
+const STATUS_LABEL: Record<string, { label: string; className: string; icon: React.ElementType }> = {
+  active: { label: "Belum Dibayar", className: "text-amber-600 border-amber-500/30 bg-amber-500/10", icon: ClockIcon },
+  partial: { label: "Cicilan", className: "bg-blue-500/10 text-blue-600 border-blue-500/20", icon: ClockIcon },
+  paid: { label: "Lunas", className: "bg-emerald-500 text-white", icon: CheckCircleIcon },
+  overdue: { label: "Jatuh Tempo", className: "bg-rose-500 text-white", icon: ClockIcon },
+  cancelled: { label: "Dibatalkan", className: "bg-muted text-muted-foreground", icon: XCircleIcon },
+};
 
 export default function DebtsReceivablesPage() {
-  const store = useMockStore();
-  const activeUser = store.getActiveUser();
-  const accessibleWallets = store.getAccessibleWallets();
-  const users = store.users;
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const activeUserId = user?.id ?? "";
+
+  const [debts, setDebts] = useState<Debt[]>([]);
+  const [payments, setPayments] = useState<DebtPayment[]>([]);
+  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [members, setMembers] = useState<HouseholdMemberResponse[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setHasError(false);
+    try {
+      const [debtList, walletList, memberList] = await Promise.all([
+        debtsService.listDebts(),
+        walletsService.listWallets(),
+        householdsService.listMembers(),
+      ]);
+      setDebts(debtList);
+      setWallets(walletList);
+      setMembers(memberList);
+      const paymentLists = await Promise.all(
+        debtList.map((d) => debtsService.listPayments(d.id))
+      );
+      setPayments(paymentLists.flat());
+    } catch {
+      setHasError(true);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Create & Edit Modal State
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
 
   // Form Fields State
+  const [formOwnerType, setFormOwnerType] = useState<"user" | "household">("user");
   const [formType, setFormType] = useState<DebtType>("utang");
   const [formCounterparty, setFormCounterparty] = useState("");
   const [formPrincipalFormatted, setFormPrincipalFormatted] = useState("");
-  const [formAssignedUserIds, setFormAssignedUserIds] = useState<string[]>([activeUser.id]);
   const [formUsePortion, setFormUsePortion] = useState(false);
   const [formPortionAdminFormatted, setFormPortionAdminFormatted] = useState("");
   const [formPortionMemberFormatted, setFormPortionMemberFormatted] = useState("");
@@ -99,6 +141,7 @@ export default function DebtsReceivablesPage() {
   const [payWalletId, setPayWalletId] = useState<string>("");
   const [payAmountFormatted, setPayAmountFormatted] = useState<string>("");
   const [payDate, setPayDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
+  const [isPaying, setIsPaying] = useState(false);
 
   // Delete Dialog State
   const [deletingDebtId, setDeletingDebtId] = useState<string | null>(null);
@@ -107,13 +150,12 @@ export default function DebtsReceivablesPage() {
   const [detailDebt, setDetailDebt] = useState<Debt | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
-  // Open Create Dialog
   const handleOpenCreate = () => {
     setEditingDebt(null);
+    setFormOwnerType("user");
     setFormType("utang");
     setFormCounterparty("");
     setFormPrincipalFormatted("");
-    setFormAssignedUserIds([activeUser.id]);
     setFormUsePortion(false);
     setFormPortionAdminFormatted("");
     setFormPortionMemberFormatted("");
@@ -122,15 +164,14 @@ export default function DebtsReceivablesPage() {
     setIsFormOpen(true);
   };
 
-  // Open Edit Dialog
   const handleOpenEdit = (debt: Debt) => {
     setEditingDebt(debt);
+    setFormOwnerType(debt.owner_household_id ? "household" : "user");
     setFormType(debt.type);
     setFormCounterparty(debt.counterparty);
     setFormPrincipalFormatted(formatCurrencyString(debt.principal));
-    const creatorOrAssignee = debt.created_by_user_id || debt.assigned_to_user_id || activeUser.id;
-    setFormAssignedUserIds(debt.assigned_user_ids || [creatorOrAssignee]);
-    setFormUsePortion(debt.use_portion || false);
+    const hasPortion = Boolean(debt.portion_admin || debt.portion_member);
+    setFormUsePortion(hasPortion);
     setFormPortionAdminFormatted(debt.portion_admin ? formatCurrencyString(debt.portion_admin) : "");
     setFormPortionMemberFormatted(debt.portion_member ? formatCurrencyString(debt.portion_member) : "");
     setFormDueDate(debt.due_date);
@@ -138,14 +179,6 @@ export default function DebtsReceivablesPage() {
     setIsFormOpen(true);
   };
 
-  // Toggle assigned member in form
-  const handleToggleAssignedUser = (userId: string) => {
-    setFormAssignedUserIds((prev) =>
-      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
-    );
-  };
-
-  // Auto Split 50:50
   const handleSplit5050 = () => {
     const principal = parseCurrencyStringToNumber(formPrincipalFormatted);
     const half = Math.floor(principal / 2);
@@ -153,54 +186,99 @@ export default function DebtsReceivablesPage() {
     setFormPortionMemberFormatted(formatCurrencyString(principal - half));
   };
 
-  // Submit Form (Create / Edit)
-  const handleSaveDebt = (e: React.FormEvent) => {
+  const handleSaveDebt = async (e: React.FormEvent) => {
     e.preventDefault();
     const principal = parseCurrencyStringToNumber(formPrincipalFormatted);
     const portionAdmin = parseCurrencyStringToNumber(formPortionAdminFormatted);
     const portionMember = parseCurrencyStringToNumber(formPortionMemberFormatted);
 
-    const payload = {
-      type: formType,
-      counterparty: formCounterparty,
-      principal,
-      assigned_to_user_id: formAssignedUserIds[0] || activeUser.id,
-      assigned_user_ids: formAssignedUserIds.length > 0 ? formAssignedUserIds : [activeUser.id],
-      use_portion: formUsePortion,
-      portion_admin: formUsePortion ? portionAdmin : undefined,
-      portion_member: formUsePortion ? portionMember : undefined,
-      due_date: formDueDate,
-      note: formNote,
-    };
-
-    const success = editingDebt
-      ? store.updateDebt(editingDebt.id, payload)
-      : store.addDebt(payload);
-
-    if (success) {
+    setIsSubmitting(true);
+    try {
+      if (editingDebt) {
+        await debtsService.updateDebt(editingDebt.id, {
+          type: formType,
+          counterparty: formCounterparty,
+          principal,
+          portion_admin: formUsePortion ? portionAdmin : 0,
+          portion_member: formUsePortion ? portionMember : 0,
+          due_date: formDueDate,
+          note: formNote,
+        });
+        toast.success(`Catatan ${formType} "${formCounterparty}" berhasil diperbarui!`);
+      } else {
+        await debtsService.createDebt({
+          owner_type: formOwnerType,
+          type: formType,
+          counterparty: formCounterparty,
+          principal,
+          portion_admin: formUsePortion ? portionAdmin : 0,
+          portion_member: formUsePortion ? portionMember : 0,
+          due_date: formDueDate,
+          note: formNote,
+        });
+        toast.success(`Catatan ${formType} "${formCounterparty}" berhasil dibuat!`);
+      }
       setIsFormOpen(false);
+      loadData();
+    } catch (err) {
+      const description =
+        err && typeof err === "object" && "response" in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      toast.error("Gagal menyimpan catatan utang/piutang", { description });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // Submit Payment
-  const handlePayDebt = (e: React.FormEvent) => {
+  const handlePayDebt = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDebtId || !payWalletId || !payAmountFormatted) return;
 
     const amount = parseCurrencyStringToNumber(payAmountFormatted);
-    const success = store.addDebtPayment(selectedDebtId, payWalletId, amount, payDate);
-
-    if (success) {
+    setIsPaying(true);
+    try {
+      await debtsService.addPayment(selectedDebtId, {
+        wallet_id: payWalletId,
+        amount,
+        date: payDate,
+      });
+      toast.success("Pembayaran berhasil dicatat!");
       setPayAmountFormatted("");
       setSelectedDebtId(null);
+      loadData();
+    } catch (err) {
+      const description =
+        err && typeof err === "object" && "response" in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      toast.error("Gagal mencatat pembayaran", { description });
+    } finally {
+      setIsPaying(false);
     }
   };
 
-  // Confirm Delete
-  const handleConfirmDelete = () => {
-    if (deletingDebtId) {
-      store.deleteDebt(deletingDebtId);
+  const handleConfirmDelete = async () => {
+    if (!deletingDebtId) return;
+    try {
+      await debtsService.deleteDebt(deletingDebtId);
+      toast.success("Catatan berhasil dihapus!");
       setDeletingDebtId(null);
+      loadData();
+    } catch {
+      toast.error("⚠️ DATA TIDAK DAPAT DIHAPUS!", {
+        description: "Utang/Piutang ini masih memiliki riwayat pembayaran aktif. Void pembayaran terkait lebih dulu.",
+      });
+    }
+  };
+
+  const handleVoidPayment = async (debtId: string, paymentId: string) => {
+    try {
+      await debtsService.voidPayment(debtId, paymentId);
+      toast.info("Pembayaran berhasil di-void");
+      loadData();
+    } catch {
+      toast.error("Gagal membatalkan pembayaran.");
     }
   };
 
@@ -221,19 +299,13 @@ export default function DebtsReceivablesPage() {
         label: "Status Pelunasan",
         type: "select",
         options: [
-          { label: "Belum Dibayar", value: "belum_lunas" },
-          { label: "Cicilan", value: "cicilan" },
-          { label: "Lunas", value: "lunas" },
+          { label: "Belum Dibayar", value: "active" },
+          { label: "Cicilan", value: "partial" },
+          { label: "Lunas", value: "paid" },
         ],
       },
-      {
-        id: "assigned_to_user_id",
-        label: "Penanggung Jawab",
-        type: "select",
-        options: users.map((u) => ({ label: u.name, value: u.id })),
-      },
     ];
-  }, [users]);
+  }, []);
 
   const debtSortOptions = useMemo(() => {
     return [
@@ -247,7 +319,7 @@ export default function DebtsReceivablesPage() {
   const [debtSortIndex, setDebtSortIndex] = useState(0);
 
   const debtControls = useDataControls<Debt>({
-    data: store.debts,
+    data: debts,
     searchFields: ["counterparty", "note"],
     searchPredicate: (item, q) =>
       item.counterparty.toLowerCase().includes(q) ||
@@ -257,19 +329,13 @@ export default function DebtsReceivablesPage() {
   });
 
   // Data Controls for Debt Payments (Riwayat Cicilan & Pelunasan)
-  const payFilterConfigs = useMemo<FilterConfig<(typeof store.debtPayments)[0]>[]>(() => {
+  const payFilterConfigs = useMemo<FilterConfig<DebtPayment>[]>(() => {
     return [
       {
         id: "wallet_id",
         label: "Wallet",
         type: "select",
-        options: store.wallets.map((w) => ({ label: w.name, value: w.id })),
-      },
-      {
-        id: "recorded_by",
-        label: "Diinput Oleh",
-        type: "select",
-        options: users.map((u) => ({ label: u.name, value: u.id })),
+        options: wallets.map((w) => ({ label: w.name, value: w.id })),
       },
       {
         id: "status",
@@ -281,7 +347,7 @@ export default function DebtsReceivablesPage() {
         ],
       },
     ];
-  }, [store.wallets, users]);
+  }, [wallets]);
 
   const paySortOptions = useMemo(() => {
     return [
@@ -294,13 +360,13 @@ export default function DebtsReceivablesPage() {
   const [paySortIndex, setPaySortIndex] = useState(0);
 
   const payControls = useDataControls({
-    data: store.debtPayments,
+    data: payments,
     searchFields: ["date"],
     initialSort: paySortOptions[0].rules,
     initialPageSize: 10,
   });
 
-  const activeDebtForPayment = store.debts.find((d) => d.id === selectedDebtId);
+  const activeDebtForPayment = debts.find((d) => d.id === selectedDebtId);
 
   return (
     <div className="py-8 px-6 sm:px-8 sm:py-6 space-y-6">
@@ -312,7 +378,7 @@ export default function DebtsReceivablesPage() {
             <h1 className="text-2xl font-bold tracking-tight">Manajemen Utang & Piutang</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            Lacak pokok kewajiban & tagihan keluarga, assign penanggung jawab anggota, porsi tanggung jawab, dan pembayaran via wallet.
+            Lacak pokok kewajiban & tagihan keluarga, porsi tanggung jawab, dan pembayaran via wallet.
           </p>
         </div>
       </div>
@@ -357,17 +423,17 @@ export default function DebtsReceivablesPage() {
           </Badge>
         </CardHeader>
         <CardContent className="space-y-4">
-          {store.simulatedError ? (
-            <ErrorState onRetry={() => store.setSimulatedError(false)} />
-          ) : store.simulatedLoading ? (
-            <DataTableSkeleton rows={5} cols={8} />
+          {hasError ? (
+            <ErrorState onRetry={loadData} />
+          ) : isLoading ? (
+            <DataTableSkeleton rows={5} cols={7} />
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Tipe</TableHead>
                   <TableHead>Pihak Kedua (Counterparty)</TableHead>
-                  <TableHead>Penanggung Jawab / Member</TableHead>
+                  <TableHead>Kepemilikan</TableHead>
                   <TableHead className="text-right">Pokok Awal</TableHead>
                   <TableHead className="text-right">Progress Pelunasan</TableHead>
                   <TableHead>Jatuh Tempo</TableHead>
@@ -392,25 +458,16 @@ export default function DebtsReceivablesPage() {
                   </TableRow>
                 ) : (
                 debtControls.paginatedData.map((debt) => {
-                  const creatorId = debt.created_by_user_id || debt.assigned_to_user_id || "user-1";
-                  const assignedUserIds = debt.assigned_user_ids || [creatorId];
-                  const canEdit = activeUser.id === creatorId || store.activeRole === "admin";
-                  const canPay = canEdit || assignedUserIds.includes(activeUser.id);
+                  const canEdit = isAdmin || debt.owner_user_id === activeUserId;
+                  const ownerMember = members.find((m) => m.user_id === debt.owner_user_id);
 
-                  const payments = store.debtPayments.filter(
+                  const debtPayments = payments.filter(
                     (p) => p.debt_id === debt.id && p.status === "active"
                   );
-                  const paidTotal = payments.reduce((sum, p) => sum + p.amount, 0);
-
-                  // Calculate per-member breakdown of payment
-                  const memberPaymentMap: Record<string, number> = {};
-                  payments.forEach((p) => {
-                    memberPaymentMap[p.recorded_by] = (memberPaymentMap[p.recorded_by] || 0) + p.amount;
-                  });
-
+                  const paidTotal = debtPayments.reduce((sum, p) => sum + p.amount, 0);
                   const progressPct = Math.min(100, Math.round((paidTotal / debt.principal) * 100));
                   const isUtang = debt.type === "utang";
-                  const isLunas = debt.status === "lunas";
+                  const status = STATUS_LABEL[debt.status] ?? STATUS_LABEL.active;
 
                   return (
                     <TableRow key={debt.id}>
@@ -437,29 +494,19 @@ export default function DebtsReceivablesPage() {
                       <TableCell className="font-medium text-sm">
                         <div>{debt.counterparty}</div>
                         {debt.note && <div className="text-xs text-muted-foreground">{debt.note}</div>}
-                        {debt.use_portion && (
+                        {Boolean(debt.portion_admin || debt.portion_member) && (
                           <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground">
                             <span className="bg-muted px-1.5 py-0.5 rounded font-mono">
-                              Bayu: Rp {(debt.portion_admin || 0).toLocaleString("id-ID")}
+                              Admin: Rp {(debt.portion_admin || 0).toLocaleString("id-ID")}
                             </span>
                             <span className="bg-muted px-1.5 py-0.5 rounded font-mono">
-                              Annisa: Rp {(debt.portion_member || 0).toLocaleString("id-ID")}
+                              Member: Rp {(debt.portion_member || 0).toLocaleString("id-ID")}
                             </span>
                           </div>
                         )}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {assignedUserIds.map((uId) => {
-                            const u = users.find((x) => x.id === uId);
-                            return (
-                              <Badge key={uId} variant="outline" className="gap-1 text-[10px] font-normal px-1.5 py-0">
-                                <UserIcon className="size-2.5 text-muted-foreground" />
-                                {u?.name || uId}
-                              </Badge>
-                            );
-                          })}
-                        </div>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {debt.owner_household_id ? "Household" : ownerMember?.name || "Personal"}
                       </TableCell>
                       <TableCell className="text-right font-semibold text-sm font-mono">
                         Rp {debt.principal.toLocaleString("id-ID")}
@@ -472,45 +519,14 @@ export default function DebtsReceivablesPage() {
                           </span>
                         </div>
                         <Progress value={progressPct} className="h-1.5 mt-1" />
-
-                        {/* Breakdown per member */}
-                        {payments.length > 0 && (
-                          <div className="text-[10px] text-muted-foreground mt-1 flex justify-end gap-2">
-                            {Object.entries(memberPaymentMap).map(([userId, amt]) => {
-                              const u = users.find((x) => x.id === userId);
-                              const pct = Math.round((amt / (debt.principal || 1)) * 100);
-                              return (
-                                <span key={userId} title={`${u?.name || userId}: Rp ${amt.toLocaleString("id-ID")}`}>
-                                  {u?.name || userId}: {pct}%
-                                </span>
-                              );
-                            })}
-                          </div>
-                        )}
                       </TableCell>
                       <TableCell className="text-xs font-mono text-muted-foreground">
                         {debt.due_date}
                       </TableCell>
                       <TableCell className="text-center">
-                        {isLunas ? (
-                          <Badge className="bg-emerald-500 text-white gap-1 text-[10px]">
-                            <CheckCircleIcon className="size-3" /> LUNAS
-                          </Badge>
-                        ) : debt.status === "cicilan" ? (
-                          <Badge
-                            variant="secondary"
-                            className="gap-1 text-[10px] bg-blue-500/10 text-blue-600 border-blue-500/20"
-                          >
-                            <ClockIcon className="size-3" /> CICILAN ({progressPct}%)
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] text-amber-600 border-amber-500/30 bg-amber-500/10"
-                          >
-                            BELUM DIBAYAR
-                          </Badge>
-                        )}
+                        <Badge className={`gap-1 text-[10px] ${status.className}`}>
+                          <status.icon className="size-3" /> {status.label}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-1">
@@ -526,14 +542,14 @@ export default function DebtsReceivablesPage() {
                           >
                             <EyeIcon className="size-3.5" />
                           </Button>
-                          {!isLunas && canPay && (
+                          {debt.status !== "paid" && debt.status !== "cancelled" && (
                             <Button
                               size="sm"
                               variant="outline"
                               className="h-7 text-xs gap-1"
                               onClick={() => {
                                 setSelectedDebtId(debt.id);
-                                setPayWalletId(accessibleWallets[0]?.id || "");
+                                setPayWalletId(wallets[0]?.id || "");
                               }}
                             >
                               <WalletIcon className="size-3" />
@@ -555,13 +571,7 @@ export default function DebtsReceivablesPage() {
                                 size="icon"
                                 variant="ghost"
                                 className="h-7 w-7 text-rose-500 hover:text-rose-600 hover:bg-rose-500/10"
-                                onClick={() => {
-                                  if (store.hasDebtTrackRecord(debt.id)) {
-                                    store.deleteDebt(debt.id);
-                                  } else {
-                                    setDeletingDebtId(debt.id);
-                                  }
-                                }}
+                                onClick={() => setDeletingDebtId(debt.id)}
                                 title="Hapus Utang/Piutang"
                               >
                                 <TrashIcon className="size-3.5" />
@@ -597,7 +607,7 @@ export default function DebtsReceivablesPage() {
                 {editingDebt ? "Edit Utang / Piutang" : "Tambah Utang / Piutang Baru"}
               </DialogTitle>
               <DialogDescription>
-                Catat utang kewajiban atau piutang tagihan baru keluarga. Pembuat record otomatis menjadi penanggung jawab.
+                Catat utang kewajiban atau piutang tagihan baru keluarga.
               </DialogDescription>
             </DialogHeader>
 
@@ -615,39 +625,23 @@ export default function DebtsReceivablesPage() {
                 </Select>
               </div>
 
-              {/* Multi-assigned member selection */}
-              <div className="grid gap-2 border border-border/60 rounded-lg p-3 bg-muted/20">
-                <Label className="text-xs font-semibold flex items-center gap-1.5">
-                  <UserCheckIcon className="size-4 text-indigo-500" />
-                  Member Ditugaskan (Bisa Menginput Pembayaran)
-                </Label>
-                <p className="text-[11px] text-muted-foreground mb-1">
-                  Pembuat record otomatis diset sebagai penanggung jawab utama. Anda dapat mencentang member lain untuk memberi wewenang mencatat pembayaran/penerimaan.
-                </p>
-                <div className="space-y-2 pt-1">
-                  {users.map((u) => {
-                    const isChecked = formAssignedUserIds.includes(u.id);
-                    const isCreator = editingDebt ? u.id === (editingDebt.created_by_user_id || editingDebt.assigned_to_user_id) : u.id === activeUser.id;
-                    return (
-                      <div key={u.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`member-${u.id}`}
-                          checked={isChecked || isCreator}
-                          disabled={isCreator}
-                          onCheckedChange={() => handleToggleAssignedUser(u.id)}
-                        />
-                        <label
-                          htmlFor={`member-${u.id}`}
-                          className="text-xs font-medium leading-none cursor-pointer flex items-center gap-1.5"
-                        >
-                          <span>{u.name}</span>
-                          {isCreator && <span className="text-[10px] text-indigo-600 font-semibold">(Pembuat Record)</span>}
-                        </label>
-                      </div>
-                    );
-                  })}
+              {!editingDebt && (
+                <div className="grid gap-2">
+                  <Label>Kepemilikan</Label>
+                  <Select
+                    value={formOwnerType}
+                    onValueChange={(val) => setFormOwnerType(val as "user" | "household")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="user">Personal (Saya)</SelectItem>
+                      {isAdmin && <SelectItem value="household">Household (Bersama)</SelectItem>}
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
+              )}
 
               <div className="grid gap-2">
                 <Label>Pihak Kedua (Counterparty)</Label>
@@ -675,7 +669,7 @@ export default function DebtsReceivablesPage() {
                   <div className="space-y-0.5">
                     <Label className="text-xs font-semibold">Aktifkan Porsi Tanggung Jawab</Label>
                     <p className="text-[11px] text-muted-foreground">
-                      Bagi rincian pokok tanggung jawab per individu (Bayu vs Annisa).
+                      Bagi rincian pokok tanggung jawab admin vs member.
                     </p>
                   </div>
                   <Switch checked={formUsePortion} onCheckedChange={setFormUsePortion} />
@@ -696,17 +690,17 @@ export default function DebtsReceivablesPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="grid gap-1.5">
-                        <Label className="text-xs">Porsi Bayu</Label>
+                        <Label className="text-xs">Porsi Admin</Label>
                         <CurrencyInput
-                          placeholder="Porsi Bayu"
+                          placeholder="Porsi Admin"
                           value={formPortionAdminFormatted}
                           onValueChange={(_, formatted) => setFormPortionAdminFormatted(formatted)}
                         />
                       </div>
                       <div className="grid gap-1.5">
-                        <Label className="text-xs">Porsi Annisa</Label>
+                        <Label className="text-xs">Porsi Member</Label>
                         <CurrencyInput
-                          placeholder="Porsi Annisa"
+                          placeholder="Porsi Member"
                           value={formPortionMemberFormatted}
                           onValueChange={(_, formatted) => setFormPortionMemberFormatted(formatted)}
                         />
@@ -740,7 +734,7 @@ export default function DebtsReceivablesPage() {
               <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
                 Batal
               </Button>
-              <Button type="submit">
+              <Button type="submit" disabled={isSubmitting}>
                 {editingDebt ? "Simpan Perubahan" : "Buat Catatan"}
               </Button>
             </DialogFooter>
@@ -765,7 +759,7 @@ export default function DebtsReceivablesPage() {
                     : "Catat Penerimaan Piutang"}
                 </DialogTitle>
                 <DialogDescription>
-                  Pilih wallet milik Anda yang akan{" "}
+                  Pilih wallet yang akan{" "}
                   {activeDebtForPayment.type === "utang" ? "dipotong" : "bertambah"} saldonya.
                 </DialogDescription>
               </DialogHeader>
@@ -788,14 +782,14 @@ export default function DebtsReceivablesPage() {
                       <SelectValue placeholder="Pilih wallet..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {accessibleWallets.map((w) => (
+                      {wallets.map((w) => (
                         <SelectItem key={w.id} value={w.id}>
                           {w.name} (Saldo: Rp {w.balance.toLocaleString("id-ID")})
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  {store.activeRole === "member" && (
+                  {!isAdmin && (
                     <p className="text-[11px] text-muted-foreground">
                       * Sebagai Member, Anda hanya dapat memotong/menambah saldo dari wallet yang di-assign pada Anda.
                     </p>
@@ -827,7 +821,7 @@ export default function DebtsReceivablesPage() {
                 <Button type="button" variant="outline" onClick={() => setSelectedDebtId(null)}>
                   Batal
                 </Button>
-                <Button type="submit">Konfirmasi Pembayaran</Button>
+                <Button type="submit" disabled={isPaying}>Konfirmasi Pembayaran</Button>
               </DialogFooter>
             </form>
           </DialogContent>
@@ -840,7 +834,7 @@ export default function DebtsReceivablesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Konfirmasi Hapus Utang / Piutang</AlertDialogTitle>
             <AlertDialogDescription>
-              Apakah Anda yakin ingin menghapus catatan utang/piutang ini? Tindakan ini tidak dapat dibatalkan.
+              Apakah Anda yakin ingin menghapus catatan utang/piutang ini? Jika masih ada pembayaran aktif, penghapusan akan ditolak.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -886,7 +880,6 @@ export default function DebtsReceivablesPage() {
                 <TableHead>Tanggal</TableHead>
                 <TableHead>Utang / Piutang</TableHead>
                 <TableHead>Wallet Terpotong/Bertambah</TableHead>
-                <TableHead>Diinput Oleh</TableHead>
                 <TableHead className="text-right">Nominal</TableHead>
                 <TableHead className="text-center">Aksi</TableHead>
               </TableRow>
@@ -894,15 +887,14 @@ export default function DebtsReceivablesPage() {
             <TableBody>
               {payControls.paginatedData.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-6 text-muted-foreground text-xs">
+                  <TableCell colSpan={5} className="text-center py-6 text-muted-foreground text-xs">
                     Belum ada riwayat cicilan yang sesuai.
                   </TableCell>
                 </TableRow>
               ) : (
                 payControls.paginatedData.map((dp) => {
-                  const debt = store.debts.find((d) => d.id === dp.debt_id);
-                  const wallet = store.wallets.find((w) => w.id === dp.wallet_id);
-                  const recorder = store.users.find((u) => u.id === dp.recorded_by);
+                  const debt = debts.find((d) => d.id === dp.debt_id);
+                  const wallet = wallets.find((w) => w.id === dp.wallet_id);
                   const isVoid = dp.status === "void";
 
                   return (
@@ -921,7 +913,6 @@ export default function DebtsReceivablesPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{wallet?.name || "-"}</TableCell>
-                      <TableCell className="text-xs">{recorder?.name || "-"}</TableCell>
                       <TableCell className="text-right font-semibold font-mono text-xs">
                         Rp {dp.amount.toLocaleString("id-ID")}
                       </TableCell>
@@ -931,7 +922,7 @@ export default function DebtsReceivablesPage() {
                             variant="ghost"
                             size="sm"
                             className="h-7 px-2 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                            onClick={() => store.deleteDebtPayment(dp.id)}
+                            onClick={() => handleVoidPayment(dp.debt_id, dp.id)}
                           >
                             <XCircleIcon className="size-3.5 mr-1" />
                             Void
@@ -958,20 +949,17 @@ export default function DebtsReceivablesPage() {
       {/* Detail Dialog */}
       <DebtDetailDialog
         debt={detailDebt}
+        payments={payments.filter((p) => p.debt_id === detailDebt?.id)}
+        wallets={wallets}
         open={isDetailOpen}
         onOpenChange={setIsDetailOpen}
         onPayClick={(debtId) => {
           setSelectedDebtId(debtId);
-          setPayWalletId(accessibleWallets[0]?.id || "");
+          setPayWalletId(wallets[0]?.id || "");
         }}
         onEditClick={handleOpenEdit}
-        onDeleteClick={(debtId) => {
-          if (store.hasDebtTrackRecord(debtId)) {
-            store.deleteDebt(debtId);
-          } else {
-            setDeletingDebtId(debtId);
-          }
-        }}
+        onDeleteClick={(debtId) => setDeletingDebtId(debtId)}
+        canEdit={detailDebt ? isAdmin || detailDebt.owner_user_id === activeUserId : false}
       />
     </div>
   );

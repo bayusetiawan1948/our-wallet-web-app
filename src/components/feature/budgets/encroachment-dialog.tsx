@@ -19,8 +19,7 @@ import {
   WalletIcon,
   TargetIcon,
 } from "@phosphor-icons/react";
-import { useMockStore } from "@/lib/mock-store";
-import type { Wallet, Reservation } from "@/types";
+import type { Wallet, Reservation, Budget, Goal } from "@/types";
 
 interface EncroachmentDialogProps {
   open: boolean;
@@ -28,6 +27,8 @@ interface EncroachmentDialogProps {
   shortfall: number;
   wallet: Wallet | null;
   reservations: Reservation[];
+  budgets: Budget[];
+  goals: Goal[];
   onConfirm: (allocations: Array<{ budget_id?: string; goal_id?: string; amount: number }>) => void;
 }
 
@@ -35,16 +36,19 @@ function EncroachmentDialogContent({
   shortfall,
   wallet,
   reservations,
+  budgets,
+  goals,
   onConfirm,
   onClose,
 }: {
   shortfall: number;
   wallet: Wallet;
   reservations: Reservation[];
+  budgets: Budget[];
+  goals: Goal[];
   onConfirm: (allocations: Array<{ budget_id?: string; goal_id?: string; amount: number }>) => void;
   onClose: () => void;
 }) {
-  const store = useMockStore();
   const [allocations, setAllocations] = useState<Record<string, number>>(() => {
     if (reservations.length === 1) {
       return { [reservations[0].id]: shortfall };
@@ -135,8 +139,8 @@ function EncroachmentDialogContent({
             </div>
           ) : (
             reservations.map((res) => {
-              const budget = res.budget_id ? store.budgets.find((b) => b.id === res.budget_id) : null;
-              const goal = res.goal_id ? store.goals.find((g) => g.id === res.goal_id) : null;
+              const budget = res.budget_id ? budgets.find((b) => b.id === res.budget_id) : null;
+              const goal = res.goal_id ? goals.find((g) => g.id === res.goal_id) : null;
               const name = budget ? budget.name : goal ? goal.name : "Reservasi Dompet";
               const typeLabel = budget ? "Budget Berulang" : "Financial Goal";
 
@@ -240,6 +244,8 @@ export function EncroachmentDialog({
   shortfall,
   wallet,
   reservations,
+  budgets,
+  goals,
   onConfirm,
 }: EncroachmentDialogProps) {
   if (!wallet) return null;
@@ -253,6 +259,8 @@ export function EncroachmentDialog({
             shortfall={shortfall}
             wallet={wallet}
             reservations={reservations}
+            budgets={budgets}
+            goals={goals}
             onConfirm={onConfirm}
             onClose={() => onOpenChange(false)}
           />

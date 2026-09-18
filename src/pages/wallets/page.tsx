@@ -1,6 +1,10 @@
-import React, { useState, useMemo } from "react";
-import { useMockStore } from "@/lib/mock-store";
-import type { WalletType } from "@/types";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { toast } from "sonner";
+import { useAuth } from "@/contexts/auth-context";
+import * as walletsService from "@/services/wallets.service";
+import * as householdsService from "@/services/households.service";
+import type { HouseholdMemberResponse } from "@/services/households.service";
+import type { Wallet, WalletReconciliation, WalletType } from "@/types";
 import { useDataControls, type FilterConfig } from "@/hooks/use-data-controls";
 import { DataTableToolbar } from "@/components/common/data-table-toolbar";
 import { DataPagination } from "@/components/common/data-table-pagination";
@@ -71,15 +75,44 @@ import {
 } from "@/components/ui/table";
 
 export default function WalletsPage() {
-  const store = useMockStore();
-  const accessibleWallets = store.getAccessibleWallets();
-  const activeUser = store.getActiveUser();
-  const isAdmin = store.activeRole === "admin";
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const activeUserId = user?.id ?? "";
+
+  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [members, setMembers] = useState<HouseholdMemberResponse[]>([]);
+  const [reconciliations, setReconciliations] = useState<WalletReconciliation[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+
+  const loadWallets = useCallback(async () => {
+    setIsLoading(true);
+    setHasError(false);
+    try {
+      const [walletList, memberList] = await Promise.all([
+        walletsService.listWallets(),
+        householdsService.listMembers(),
+      ]);
+      setWallets(walletList);
+      setMembers(memberList);
+      const reconciliationLists = await Promise.all(
+        walletList.map((w) => walletsService.listReconciliations(w.id))
+      );
+      setReconciliations(reconciliationLists.flat());
+    } catch {
+      setHasError(true);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadWallets();
+  }, [loadWallets]);
 
   // Reconciliation State
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const [actualBalanceInput, setActualBalanceInput] = useState<string>("");
-  const [reconcileNotes, setReconcileNotes] = useState<string>("");
 
   // Create Wallet State
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -87,7 +120,8 @@ export default function WalletsPage() {
   const [newType, setNewType] = useState<WalletType>("bank");
   const [newInitialBalance, setNewInitialBalance] = useState("0");
   const [newOwnerType, setNewOwnerType] = useState<"user" | "household">("user");
-  const [newOwnerUserId, setNewOwnerUserId] = useState(activeUser.id);
+  const [newOwnerUserId, setNewOwnerUserId] = useState(activeUserId);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Edit & Delete Wallet State
   const [editingWalletId, setEditingWalletId] = useState<string | null>(null);
@@ -97,13 +131,13 @@ export default function WalletsPage() {
   const [editOwnerType, setEditOwnerType] = useState<"user" | "household">("user");
   const [editOwnerUserId, setEditOwnerUserId] = useState("");
 
-  const selectedWallet = store.wallets.find((w) => w.id === selectedWalletId);
+  const selectedWallet = wallets.find((w) => w.id === selectedWalletId);
   const recordedBal = selectedWallet?.balance || 0;
   const numActual = parseFloat(actualBalanceInput) || 0;
   const diff = numActual - recordedBal;
 
   // Data Controls for Wallets Grid
-  const walletFilterConfigs = useMemo<FilterConfig<(typeof store.wallets)[0]>[]>(() => {
+  const walletFilterConfigs = useMemo<FilterConfig<Wallet>[]>(() => {
     return [
       {
         id: "type",
@@ -129,7 +163,7 @@ export default function WalletsPage() {
   const [walletSortIndex, setWalletSortIndex] = useState(0);
 
   const walletControls = useDataControls({
-    data: accessibleWallets,
+    data: wallets,
     searchFields: ["name", "type"],
     initialSort: walletSortOptions[0].rules,
     initialPageSize: 10,
@@ -146,48 +180,57 @@ export default function WalletsPage() {
   const [recSortIndex, setRecSortIndex] = useState(0);
 
   const recControls = useDataControls({
-    data: store.reconciliations,
-    searchFields: ["notes", "date"],
+    data: reconciliations,
+    searchFields: ["date"],
     initialSort: recSortOptions[0].rules,
     initialPageSize: 10,
   });
 
-  const handleReconcile = (e: React.FormEvent) => {
+  const handleReconcile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedWalletId || actualBalanceInput === "") return;
 
-    store.reconcileWallet(selectedWalletId, numActual, reconcileNotes);
-    setActualBalanceInput("");
-    setReconcileNotes("");
-    setSelectedWalletId(null);
+    try {
+      await walletsService.createReconciliation(selectedWalletId, numActual);
+      toast.success("Rekonsiliasi berhasil disimpan!");
+      setActualBalanceInput("");
+      setSelectedWalletId(null);
+      loadWallets();
+    } catch {
+      toast.error("Gagal menyimpan rekonsiliasi. Coba lagi.");
+    }
   };
 
-  const handleAddWallet = (e: React.FormEvent) => {
+  const handleAddWallet = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
 
-    const initialBalNum = parseFloat(newInitialBalance) || 0;
-
-    const success = store.addWallet({
-      name: newName.trim(),
-      type: newType,
-      initialBalance: initialBalNum,
-      ownerType: newOwnerType,
-      ownerUserId: newOwnerType === "user" ? newOwnerUserId : undefined,
-    });
-
-    if (success) {
+    setIsSubmitting(true);
+    try {
+      await walletsService.createWallet({
+        name: newName.trim(),
+        type: newType,
+        initial_balance: parseFloat(newInitialBalance) || 0,
+        owner_type: newOwnerType,
+        owner_user_id: newOwnerType === "user" ? newOwnerUserId : undefined,
+      });
+      toast.success(`Dompet "${newName.trim()}" berhasil dibuat!`);
       setNewName("");
       setNewType("bank");
       setNewInitialBalance("0");
       setNewOwnerType("user");
-      setNewOwnerUserId(activeUser.id);
+      setNewOwnerUserId(activeUserId);
       setIsAddOpen(false);
+      loadWallets();
+    } catch {
+      toast.error("Gagal membuat dompet. Coba lagi.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const openEditDialog = (walletId: string) => {
-    const w = store.wallets.find((item) => item.id === walletId);
+    const w = wallets.find((item) => item.id === walletId);
     if (!w) return;
 
     setEditingWalletId(walletId);
@@ -195,26 +238,46 @@ export default function WalletsPage() {
     setEditType(w.type);
     if (w.owner_household_id) {
       setEditOwnerType("household");
-      setEditOwnerUserId(activeUser.id);
+      setEditOwnerUserId(activeUserId);
     } else {
       setEditOwnerType("user");
-      setEditOwnerUserId(w.owner_user_id || activeUser.id);
+      setEditOwnerUserId(w.owner_user_id || activeUserId);
     }
   };
 
-  const handleUpdateWallet = (e: React.FormEvent) => {
+  const handleUpdateWallet = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingWalletId || !editName.trim()) return;
 
-    const success = store.updateWallet(editingWalletId, {
-      name: editName.trim(),
-      type: editType,
-      ownerType: editOwnerType,
-      ownerUserId: editOwnerType === "user" ? editOwnerUserId : undefined,
-    });
-
-    if (success) {
+    setIsSubmitting(true);
+    try {
+      await walletsService.updateWallet(editingWalletId, {
+        name: editName.trim(),
+        type: editType,
+        owner_type: editOwnerType,
+        owner_user_id: editOwnerType === "user" ? editOwnerUserId : undefined,
+      });
+      toast.success(`Dompet "${editName.trim()}" berhasil diperbarui!`);
       setEditingWalletId(null);
+      loadWallets();
+    } catch {
+      toast.error("Gagal memperbarui dompet. Coba lagi.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteWallet = async (walletId: string, walletName: string) => {
+    try {
+      await walletsService.deleteWallet(walletId);
+      toast.success(`Dompet "${walletName}" berhasil dihapus!`);
+      setDeletingWalletId(null);
+      loadWallets();
+    } catch {
+      toast.error("⚠️ TIDAK DAPAT MENGHAPUS DOMPET!", {
+        description: `Dompet "${walletName}" masih memiliki riwayat transaksi, transfer, atau rekonsiliasi terkait.`,
+        duration: 5000,
+      });
     }
   };
 
@@ -301,9 +364,9 @@ export default function WalletsPage() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {store.users.map((u) => (
-                              <SelectItem key={u.id} value={u.id}>
-                                {u.name} {u.id === activeUser.id ? "(Saya)" : ""}
+                            {members.map((m) => (
+                              <SelectItem key={m.user_id} value={m.user_id}>
+                                {m.name} {m.user_id === activeUserId ? "(Saya)" : ""}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -330,7 +393,7 @@ export default function WalletsPage() {
                     <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>
                       Batal
                     </Button>
-                    <Button type="submit">Buat Dompet</Button>
+                    <Button type="submit" disabled={isSubmitting}>Buat Dompet</Button>
                   </DialogFooter>
                 </form>
               </DialogContent>
@@ -373,9 +436,9 @@ export default function WalletsPage() {
         </div>
 
         {/* Accessible Wallets Grid */}
-        {store.simulatedError ? (
-          <ErrorState onRetry={() => store.setSimulatedError(false)} />
-        ) : store.simulatedLoading ? (
+        {hasError ? (
+          <ErrorState onRetry={loadWallets} />
+        ) : isLoading ? (
           <CardGridSkeleton count={4} />
         ) : walletControls.paginatedData.length === 0 ? (
           <EmptyState
@@ -390,9 +453,8 @@ export default function WalletsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {walletControls.paginatedData.map((w) => {
-            const ownerUser = store.users.find((u) => u.id === w.owner_user_id);
-            const trackCheck = store.hasWalletTrackRecord(w.id);
-            const canEdit = isAdmin || w.owner_user_id === activeUser.id;
+            const ownerUser = members.find((m) => m.user_id === w.owner_user_id);
+            const canEdit = isAdmin || w.owner_user_id === activeUserId;
             const canManage = canEdit || isAdmin;
 
             return (
@@ -442,17 +504,11 @@ export default function WalletsPage() {
                             <>
                               {canEdit && <DropdownMenuSeparator />}
                               <DropdownMenuItem
-                                onClick={() => {
-                                  if (trackCheck.hasRecord) {
-                                    store.deleteWallet(w.id);
-                                  } else {
-                                    setDeletingWalletId(w.id);
-                                  }
-                                }}
+                                onClick={() => setDeletingWalletId(w.id)}
                                 className="text-destructive focus:text-destructive"
                               >
                                 <TrashIcon className="size-4 mr-2 text-destructive" />
-                                {trackCheck.hasRecord ? "Hapus Dompet (Terkunci)" : "Hapus Dompet"}
+                                Hapus Dompet
                               </DropdownMenuItem>
                             </>
                           )}
@@ -524,7 +580,7 @@ export default function WalletsPage() {
                             <Button type="button" variant="outline" onClick={() => setEditingWalletId(null)}>
                               Batal
                             </Button>
-                            <Button type="submit">Simpan Perubahan</Button>
+                            <Button type="submit" disabled={isSubmitting}>Simpan Perubahan</Button>
                           </DialogFooter>
                         </form>
                       </DialogContent>
@@ -541,16 +597,13 @@ export default function WalletsPage() {
                         <AlertDialogHeader>
                           <AlertDialogTitle>Hapus Dompet "{w.name}"?</AlertDialogTitle>
                           <AlertDialogDescription>
-                            Apakah Anda yakin ingin menghapus dompet ini? Dompet ini belum memiliki riwayat transaksi sehingga aman untuk dihapus.
+                            Tindakan ini tidak dapat dibatalkan. Jika dompet ini masih memiliki riwayat transaksi, transfer, atau rekonsiliasi, penghapusan akan ditolak oleh sistem.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel onClick={() => setDeletingWalletId(null)}>Batal</AlertDialogCancel>
                           <AlertDialogAction
-                            onClick={() => {
-                              store.deleteWallet(w.id);
-                              setDeletingWalletId(null);
-                            }}
+                            onClick={() => handleDeleteWallet(w.id, w.name)}
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                           >
                             Hapus Dompet
@@ -562,49 +615,14 @@ export default function WalletsPage() {
                 </CardHeader>
 
                 <CardContent className="space-y-3">
-                  {(() => {
-                    const breakdown = store.getWalletBalanceBreakdown(w.id);
-                    return (
-                      <div className="space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">Saldo Total</div>
-                            <div className="text-lg font-bold font-mono tracking-tight text-foreground">
-                              {formatRupiah(breakdown.totalBalance)}
-                            </div>
-                          </div>
-                          <Badge
-                            variant={breakdown.freeBalance < 0 ? "destructive" : "outline"}
-                            className="text-[10px] font-mono"
-                          >
-                            {breakdown.freeBalance < 0 ? "Bebas Minus" : "Saldo Safe"}
-                          </Badge>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border/50 text-xs">
-                          <div className="p-2 rounded-md bg-muted/40 space-y-0.5">
-                            <span className="text-[10px] text-muted-foreground block">Terpesan (Reserved)</span>
-                            <span className="font-mono font-semibold text-amber-600 dark:text-amber-400 block">
-                              {formatRupiah(breakdown.reservedBalance)}
-                            </span>
-                          </div>
-
-                          <div className="p-2 rounded-md bg-muted/40 space-y-0.5">
-                            <span className="text-[10px] text-muted-foreground block">Saldo Bebas (Free)</span>
-                            <span
-                              className={`font-mono font-semibold block ${
-                                breakdown.freeBalance < 0
-                                  ? "text-destructive"
-                                  : "text-emerald-600 dark:text-emerald-400"
-                              }`}
-                            >
-                              {formatRupiah(breakdown.freeBalance)}
-                            </span>
-                          </div>
-                        </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">Saldo Total</div>
+                      <div className="text-lg font-bold font-mono tracking-tight text-foreground">
+                        {formatRupiah(w.balance)}
                       </div>
-                    );
-                  })()}
+                    </div>
+                  </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs">
                     <Dialog>
@@ -653,15 +671,6 @@ export default function WalletsPage() {
                               <div className={`font-mono font-bold text-sm ${diff >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
                                 {diff >= 0 ? "+" : ""} Rp {diff.toLocaleString("id-ID")}
                               </div>
-                            </div>
-
-                            <div className="grid gap-2">
-                              <Label>Catatan Rekonsiliasi</Label>
-                              <Input
-                                placeholder="Koreksi karena penyesuaian bunga / admin bank..."
-                                value={reconcileNotes}
-                                onChange={(e) => setReconcileNotes(e.target.value)}
-                              />
                             </div>
                           </div>
 
@@ -714,10 +723,10 @@ export default function WalletsPage() {
               }}
             />
 
-            {store.simulatedError ? (
-              <ErrorState onRetry={() => store.setSimulatedError(false)} />
-            ) : store.simulatedLoading ? (
-              <DataTableSkeleton rows={3} cols={6} />
+            {hasError ? (
+              <ErrorState onRetry={loadWallets} />
+            ) : isLoading ? (
+              <DataTableSkeleton rows={3} cols={5} />
             ) : (
               <Table>
                 <TableHeader>
@@ -727,13 +736,12 @@ export default function WalletsPage() {
                     <TableHead className="text-right">Saldo Tercatat</TableHead>
                     <TableHead className="text-right">Saldo Aktual</TableHead>
                     <TableHead className="text-right">Selisih Penyesuaian</TableHead>
-                    <TableHead>Catatan</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {recControls.paginatedData.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="p-0">
+                      <TableCell colSpan={5} className="p-0">
                         <EmptyState
                           title="Belum Ada Riwayat Rekonsiliasi"
                           description="Belum ada aktivitas audit pencocokan saldo dompet yang dilakukan."
@@ -744,7 +752,7 @@ export default function WalletsPage() {
                     </TableRow>
                   ) : (
                   recControls.paginatedData.map((rec) => {
-                    const wallet = store.wallets.find((w) => w.id === rec.wallet_id);
+                    const wallet = wallets.find((w) => w.id === rec.wallet_id);
                     const diffVal = rec.actual_balance - rec.recorded_balance;
 
                     return (
@@ -760,7 +768,6 @@ export default function WalletsPage() {
                         <TableCell className={`text-right font-mono text-xs font-bold ${diffVal >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
                           {diffVal >= 0 ? "+" : ""} Rp {diffVal.toLocaleString("id-ID")}
                         </TableCell>
-                        <TableCell className="text-xs">{rec.notes || "-"}</TableCell>
                       </TableRow>
                     );
                   })

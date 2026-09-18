@@ -1,5 +1,9 @@
-import React, { useState, useMemo } from "react";
-import { useMockStore } from "@/lib/mock-store";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { toast } from "sonner";
+import { useAuth } from "@/contexts/auth-context";
+import * as investmentsService from "@/services/investments.service";
+import type { InvestmentWithValuation } from "@/services/investments.service";
+import * as walletsService from "@/services/wallets.service";
 import { useDataControls, type FilterConfig } from "@/hooks/use-data-controls";
 import { DataTableToolbar } from "@/components/common/data-table-toolbar";
 import { DataPagination } from "@/components/common/data-table-pagination";
@@ -23,7 +27,7 @@ import {
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { formatRupiah } from "@/libs/number";
 import { Button } from "@/components/ui/button";
-import { type AssetType } from "@/types";
+import { type AssetType, type InvestmentTransaction, type Wallet } from "@/types";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -55,8 +59,42 @@ import {
 } from "@/components/ui/table";
 
 export default function InvestmentPage() {
-  const store = useMockStore();
-  const accessibleWallets = store.getAccessibleWallets();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+
+  const [investments, setInvestments] = useState<InvestmentWithValuation[]>([]);
+  const [transactions, setTransactions] = useState<InvestmentTransaction[]>([]);
+  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const accessibleWallets = wallets;
+
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setHasError(false);
+    try {
+      const [investmentList, walletList] = await Promise.all([
+        investmentsService.listInvestments(),
+        walletsService.listWallets(),
+      ]);
+      setInvestments(investmentList);
+      setWallets(walletList);
+      const txLists = await Promise.all(
+        investmentList.map((inv) => investmentsService.listTransactions(inv.id))
+      );
+      setTransactions(txLists.flat());
+    } catch {
+      setHasError(true);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Add New Investment Modal State
   const [isAddInvOpen, setIsAddInvOpen] = useState(false);
@@ -78,59 +116,84 @@ export default function InvestmentPage() {
   const [invTxPrice, setInvTxPrice] = useState<string>("");
   const [invTxDate, setInvTxDate] = useState<string>(new Date().toISOString().split("T")[0]);
 
-  const handleCreateInvestment = (e: React.FormEvent) => {
+  const handleCreateInvestment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newInvName.trim()) return;
 
-    const success = store.addInvestment({
-      asset_name: newInvName,
-      asset_type: newInvType,
-      unit: newInvUnit,
-      initial_price: parseFloat(newInvInitialPrice) || 0,
-      ownerType: newInvOwnerType,
-    });
-
-    if (success) {
+    setIsSubmitting(true);
+    try {
+      await investmentsService.createInvestment({
+        owner_type: newInvOwnerType === "household" ? "household" : "user",
+        asset_name: newInvName,
+        asset_type: newInvType,
+        unit: newInvUnit,
+        initial_price: parseFloat(newInvInitialPrice) || 0,
+      });
+      toast.success(`Aset investasi "${newInvName}" berhasil dibuat!`);
       setNewInvName("");
       setNewInvUnit("lot");
       setNewInvInitialPrice("");
       setIsAddInvOpen(false);
+      loadData();
+    } catch (err) {
+      const description =
+        err && typeof err === "object" && "response" in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      toast.error("Gagal membuat aset investasi", { description });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleUpdateValuation = (e: React.FormEvent) => {
+  const handleUpdateValuation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedInvForVal || !newValuationPrice) return;
-    store.updateInvestmentValuation(selectedInvForVal, parseFloat(newValuationPrice) || 0);
-    setNewValuationPrice("");
-    setSelectedInvForVal(null);
+    try {
+      await investmentsService.addValuation(selectedInvForVal, parseFloat(newValuationPrice) || 0);
+      toast.success("Harga pasar berhasil diperbarui!");
+      setNewValuationPrice("");
+      setSelectedInvForVal(null);
+      loadData();
+    } catch {
+      toast.error("Gagal memperbarui harga pasar.");
+    }
   };
 
-  const handleCreateInvTx = (e: React.FormEvent) => {
+  const handleCreateInvTx = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedInvForTx || !invTxWalletId || !invTxQty || !invTxPrice) return;
 
     const qty = parseFloat(invTxQty) || 0;
     const price = parseFloat(invTxPrice) || 0;
 
-    const success = store.addInvestmentTransaction(
-      selectedInvForTx,
-      invTxWalletId,
-      invTxType,
-      qty,
-      price,
-      invTxDate
-    );
-
-    if (success) {
+    setIsSubmitting(true);
+    try {
+      await investmentsService.addTransaction(selectedInvForTx, {
+        wallet_id: invTxWalletId,
+        type: invTxType,
+        quantity: qty,
+        price,
+        date: invTxDate,
+      });
+      toast.success("Transaksi investasi berhasil dicatat!");
       setInvTxQty("");
       setInvTxPrice("");
       setSelectedInvForTx(null);
+      loadData();
+    } catch (err) {
+      const description =
+        err && typeof err === "object" && "response" in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      toast.error("Gagal mencatat transaksi investasi", { description });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   // Data Controls for Investment Assets Grid
-  const invFilterConfigs = useMemo<FilterConfig<(typeof store.investments)[0]>[]>(() => {
+  const invFilterConfigs = useMemo<FilterConfig<InvestmentWithValuation>[]>(() => {
     return [
       {
         id: "asset_type",
@@ -159,7 +222,7 @@ export default function InvestmentPage() {
   const [invSortIndex, setInvSortIndex] = useState(0);
 
   const invControls = useDataControls({
-    data: store.investments,
+    data: investments,
     searchFields: ["asset_name", "asset_type"],
     initialSort: invSortOptions[0].rules,
     initialPageSize: 12,
@@ -167,7 +230,7 @@ export default function InvestmentPage() {
 
   // Calculate investment summaries from controls data
   const investmentSummaries = invControls.paginatedData.map((inv) => {
-    const activeTxs = store.investmentTransactions.filter(
+    const activeTxs = transactions.filter(
       (itx) => itx.investment_id === inv.id && itx.status === "active"
     );
 
@@ -184,8 +247,7 @@ export default function InvestmentPage() {
       }
     });
 
-    const latestValuation = store.valuations.find((v) => v.investment_id === inv.id);
-    const unitPrice = latestValuation ? latestValuation.price_per_unit : 0;
+    const unitPrice = inv.latest_price_per_unit ?? 0;
     const marketValue = currentQty * unitPrice;
     const returnAmount = marketValue - totalCost;
     const returnPct = totalCost > 0 ? (returnAmount / totalCost) * 100 : 0;
@@ -205,8 +267,8 @@ export default function InvestmentPage() {
 
   // All investment summaries for overall stats header
   const allInvestmentSummaries = useMemo(() => {
-    return store.investments.map((inv) => {
-      const activeTxs = store.investmentTransactions.filter(
+    return investments.map((inv) => {
+      const activeTxs = transactions.filter(
         (itx) => itx.investment_id === inv.id && itx.status === "active"
       );
 
@@ -223,8 +285,7 @@ export default function InvestmentPage() {
         }
       });
 
-      const latestValuation = store.valuations.find((v) => v.investment_id === inv.id);
-      const unitPrice = latestValuation ? latestValuation.price_per_unit : 0;
+      const unitPrice = inv.latest_price_per_unit ?? 0;
       const marketValue = currentQty * unitPrice;
 
       return {
@@ -232,7 +293,7 @@ export default function InvestmentPage() {
         totalCost,
       };
     });
-  }, [store.investments, store.investmentTransactions, store.valuations]);
+  }, [investments, transactions]);
 
   // Data Controls for Investment Transactions History
   const itxSortOptions = useMemo(() => {
@@ -246,7 +307,7 @@ export default function InvestmentPage() {
   const [itxSortIndex, setItxSortIndex] = useState(0);
 
   const itxControls = useDataControls({
-    data: store.investmentTransactions,
+    data: transactions,
     searchFields: ["date"],
     initialSort: itxSortOptions[0].rules,
     initialPageSize: 10,
@@ -402,8 +463,8 @@ export default function InvestmentPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="rounded-xl">
-                        <SelectItem value="household">Keluarga (Household)</SelectItem>
-                        <SelectItem value="user">Personal (Admin)</SelectItem>
+                        {isAdmin && <SelectItem value="household">Keluarga (Household)</SelectItem>}
+                        <SelectItem value="user">Personal</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -413,7 +474,7 @@ export default function InvestmentPage() {
                   <Button type="button" variant="outline" onClick={() => setIsAddInvOpen(false)}>
                     Batal
                   </Button>
-                  <Button type="submit">Simpan Aset Investasi</Button>
+                  <Button type="submit" disabled={isSubmitting}>Simpan Aset Investasi</Button>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -442,9 +503,9 @@ export default function InvestmentPage() {
       </div>
 
       {/* Investment Assets Grid */}
-      {store.simulatedError ? (
-        <ErrorState onRetry={() => store.setSimulatedError(false)} />
-      ) : store.simulatedLoading ? (
+      {hasError ? (
+        <ErrorState onRetry={loadData} />
+      ) : isLoading ? (
         <CardGridSkeleton count={3} />
       ) : investmentSummaries.length === 0 ? (
         <EmptyState
@@ -671,7 +732,7 @@ export default function InvestmentPage() {
                         </div>
 
                         <DialogFooter>
-                          <Button type="submit">Konfirmasi Transaksi</Button>
+                          <Button type="submit" disabled={isSubmitting}>Konfirmasi Transaksi</Button>
                         </DialogFooter>
                       </form>
                     </DialogContent>
@@ -722,9 +783,9 @@ export default function InvestmentPage() {
             }}
           />
 
-          {store.simulatedError ? (
-            <ErrorState onRetry={() => store.setSimulatedError(false)} />
-          ) : store.simulatedLoading ? (
+          {hasError ? (
+            <ErrorState onRetry={loadData} />
+          ) : isLoading ? (
             <DataTableSkeleton rows={5} cols={7} />
           ) : (
             <div className="overflow-x-auto rounded-xl border border-border/60">
@@ -754,8 +815,8 @@ export default function InvestmentPage() {
                     </TableRow>
                   ) : (
                     itxControls.paginatedData.map((itx) => {
-                      const inv = store.investments.find((i) => i.id === itx.investment_id);
-                      const wallet = store.wallets.find((w) => w.id === itx.wallet_id);
+                      const inv = investments.find((i) => i.id === itx.investment_id);
+                      const wallet = wallets.find((w) => w.id === itx.wallet_id);
                       const total = itx.quantity * itx.price;
 
                       return (

@@ -14,29 +14,23 @@ export interface WalletOption {
   name: string;
 }
 
-export const DUMMY_WALLETS: WalletOption[] = [
-  { id: "main", name: "MAIN WALLET" },
-  { id: "savings", name: "SAVINGS WALLET" },
-  { id: "investment", name: "INVESTMENT WALLET" },
-  { id: "emergency", name: "EMERGENCY FUND" },
-];
-
 interface WalletSelectorProps {
   selectedWalletIds: string[];
   onToggleWallet: (id: string) => void;
-  wallets?: WalletOption[];
+  wallets: WalletOption[];
 }
 
 export function WalletSelector({
   selectedWalletIds,
   onToggleWallet,
-  wallets = DUMMY_WALLETS,
+  wallets,
 }: WalletSelectorProps) {
   const getWalletDisplayLabel = () => {
+    if (wallets.length === 0) return "Tidak ada wallet";
     if (selectedWalletIds.length === 0) return "Select Wallet";
 
     const firstSelected = wallets.find((w) => selectedWalletIds.includes(w.id));
-    const firstName = firstSelected ? firstSelected.name : "MAIN WALLET";
+    const firstName = firstSelected ? firstSelected.name : wallets[0].name;
 
     if (selectedWalletIds.length === 1) {
       return firstName;

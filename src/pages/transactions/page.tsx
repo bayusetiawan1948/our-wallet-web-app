@@ -1,5 +1,16 @@
-import React, { useState, useMemo } from "react";
-import { useMockStore } from "@/lib/mock-store";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { toast } from "sonner";
+import { useAuth } from "@/contexts/auth-context";
+import * as transactionsService from "@/services/transactions.service";
+import * as transfersService from "@/services/transfers.service";
+import * as walletsService from "@/services/wallets.service";
+import * as categoriesService from "@/services/categories.service";
+import * as householdsService from "@/services/households.service";
+import type { HouseholdMemberResponse } from "@/services/households.service";
+import * as reservationsService from "@/services/reservations.service";
+import * as budgetsService from "@/services/budgets.service";
+import * as goalsService from "@/services/goals.service";
+import { EncroachmentDialog } from "@/components/feature/budgets/encroachment-dialog";
 import { useDataControls, type FilterConfig } from "@/hooks/use-data-controls";
 import { DataTableToolbar } from "@/components/common/data-table-toolbar";
 import { DataPagination } from "@/components/common/data-table-pagination";
@@ -18,9 +29,7 @@ import {
   TagIcon,
 } from "@phosphor-icons/react";
 import { CategoryManagement } from "@/components/feature/categories/category-management";
-import { ImportTransactionsDialog } from "@/components/feature/transactions/import-transactions-dialog";
-import { EncroachmentDialog } from "@/components/feature/budgets/encroachment-dialog";
-import type { Wallet, Reservation, Transaction } from "@/types";
+import type { Wallet, Category, Transaction, Transfer, Reservation, Budget, Goal } from "@/types";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { formatRupiah } from "@/libs/number";
 import { Button } from "@/components/ui/button";
@@ -57,41 +66,83 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function TransactionsPage() {
-  const store = useMockStore();
-  const activeUser = store.getActiveUser();
-  const accessibleWallets = store.getAccessibleWallets();
+  const { user } = useAuth();
+  const activeUserId = user?.id ?? "";
+
+  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transfers, setTransfers] = useState<Transfer[]>([]);
+  const [members, setMembers] = useState<HouseholdMemberResponse[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setHasError(false);
+    try {
+      const [walletList, categoryList, transactionList, transferList, memberList] = await Promise.all([
+        walletsService.listWallets(),
+        categoriesService.listCategories(),
+        transactionsService.listTransactions(),
+        transfersService.listTransfers(),
+        householdsService.listMembers(),
+      ]);
+      setWallets(walletList);
+      setCategories(categoryList);
+      setTransactions(transactionList);
+      setTransfers(transferList);
+      setMembers(memberList);
+    } catch {
+      setHasError(true);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const accessibleWallets = wallets;
 
   // New Transaction Form State
   const [isTxOpen, setIsTxOpen] = useState(false);
   const [txType, setTxType] = useState<"income" | "expense" | "transfer">("expense");
-  const [txWalletId, setTxWalletId] = useState<string>(accessibleWallets[0]?.id || "");
+  const [txWalletId, setTxWalletId] = useState<string>("");
   const [txCategoryId, setTxCategoryId] = useState<string>("");
   const [txAmount, setTxAmount] = useState<string>("");
   const [txDate, setTxDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [txNote, setTxNote] = useState<string>("");
 
-  // Encroachment Modal State
-  const [encroachmentOpen, setEncroachmentOpen] = useState(false);
-  const [encroachmentShortfall, setEncroachmentShortfall] = useState(0);
-  const [encroachmentWallet, setEncroachmentWallet] = useState<Wallet | null>(null);
-  const [encroachmentReservations, setEncroachmentReservations] = useState<Reservation[]>([]);
-  const [pendingTxData, setPendingTxData] = useState<Omit<Transaction, "id" | "recorded_by" | "status"> | null>(null);
+  useEffect(() => {
+    if (!txWalletId && wallets.length > 0) {
+      setTxWalletId(wallets[0].id);
+    }
+  }, [wallets, txWalletId]);
 
   // New Transfer Form State
-  const [trFromWalletId, setTrFromWalletId] = useState<string>(accessibleWallets[0]?.id || "");
-  const [trToWalletId, setTrToWalletId] = useState<string>(
-    store.wallets.find((w) => w.id !== accessibleWallets[0]?.id)?.id || ""
-  );
+  const [trFromWalletId, setTrFromWalletId] = useState<string>("");
+  const [trToWalletId, setTrToWalletId] = useState<string>("");
   const [trAmount, setTrAmount] = useState<string>("");
   const [trFee, setTrFee] = useState<string>("0");
   const [trDate, setTrDate] = useState<string>(new Date().toISOString().split("T")[0]);
-  const [trNote, setTrNote] = useState<string>("");
+
+  useEffect(() => {
+    if (!trFromWalletId && wallets.length > 0) {
+      setTrFromWalletId(wallets[0].id);
+    }
+    if (!trToWalletId && wallets.length > 1) {
+      setTrToWalletId(wallets.find((w) => w.id !== wallets[0]?.id)?.id || "");
+    }
+  }, [wallets, trFromWalletId, trToWalletId]);
 
   const availableCategories = useMemo(() => {
-    return store.categories.filter(
+    return categories.filter(
       (c) => c.is_active && (c.type === "both" || c.type === txType)
     );
-  }, [store.categories, txType]);
+  }, [categories, txType]);
 
   const effectiveCategoryId =
     txCategoryId && availableCategories.some((c) => c.id === txCategoryId)
@@ -100,92 +151,172 @@ export default function TransactionsPage() {
 
   // Live Warning calculations
   const numTxAmount = parseFloat(txAmount) || 0;
-  const selectedWallet = store.wallets.find((w) => w.id === txWalletId);
+  const selectedWallet = wallets.find((w) => w.id === txWalletId);
   const isBalanceShort = txType === "expense" && selectedWallet && selectedWallet.balance < numTxAmount;
 
-  const selectedCategory = store.categories.find((c) => c.id === effectiveCategoryId);
-  const categoryBudget = store.budgets.find((b) => b.category_id === effectiveCategoryId);
+  // Encroachment Modal State
+  const [encroachmentOpen, setEncroachmentOpen] = useState(false);
+  const [encroachmentShortfall, setEncroachmentShortfall] = useState(0);
+  const [encroachmentWallet, setEncroachmentWallet] = useState<Wallet | null>(null);
+  const [encroachmentReservations, setEncroachmentReservations] = useState<Reservation[]>([]);
+  const [encroachmentBudgets, setEncroachmentBudgets] = useState<Budget[]>([]);
+  const [encroachmentGoals, setEncroachmentGoals] = useState<Goal[]>([]);
 
-  const currentCatExpenses = store.transactions
-    .filter((t) => t.category_id === effectiveCategoryId && t.type === "expense" && t.status === "active")
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const isOverbudget =
-    txType === "expense" &&
-    categoryBudget &&
-    currentCatExpenses + numTxAmount > categoryBudget.target_amount;
-
-  const handleCreateTransaction = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!txWalletId || !effectiveCategoryId || numTxAmount <= 0) return;
-
-    const txData = {
+  const submitTransaction = async (
+    encroachments?: Array<{ budget_id?: string; goal_id?: string; amount: number }>
+  ) => {
+    await transactionsService.createTransaction({
       wallet_id: txWalletId,
       category_id: effectiveCategoryId,
-      owner_id: activeUser.id,
+      owner_id: activeUserId,
       type: txType as "income" | "expense",
       amount: numTxAmount,
       date: txDate,
       note: txNote,
-    };
+      encroachments,
+    });
+  };
 
-    const res = store.addTransactionWithEncroachmentCheck(txData);
+  const handleCreateTransaction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!txWalletId || !effectiveCategoryId || numTxAmount <= 0) return;
 
-    if (res.requiresEncroachment) {
-      setPendingTxData(txData);
-      setEncroachmentShortfall(res.shortfall || 0);
-      setEncroachmentWallet(res.wallet || null);
-      setEncroachmentReservations(res.reservations || []);
-      setEncroachmentOpen(true);
-      return;
-    }
-
-    if (res.success) {
+    setIsSubmitting(true);
+    try {
+      await submitTransaction();
+      toast.success("Transaksi berhasil dicatat!");
       setTxAmount("");
       setTxNote("");
       setIsTxOpen(false);
+      loadData();
+    } catch (err) {
+      const response =
+        err && typeof err === "object" && "response" in err
+          ? (err as { response?: { data?: { message?: string; shortfall?: number } } }).response
+          : undefined;
+
+      if (response?.data?.message === "ENCROACHMENT_REQUIRED") {
+        const wallet = wallets.find((w) => w.id === txWalletId) || null;
+        setEncroachmentShortfall(response.data.shortfall || 0);
+        setEncroachmentWallet(wallet);
+        try {
+          const [reservations, budgetList, goalList] = await Promise.all([
+            reservationsService.listReservationsByWallet(txWalletId),
+            budgetsService.listBudgets(),
+            goalsService.listGoals(),
+          ]);
+          setEncroachmentReservations(reservations);
+          setEncroachmentBudgets(budgetList.map((b) => ({
+            id: b.id,
+            owner_user_id: b.owner_user_id,
+            owner_household_id: b.owner_household_id,
+            category_id: b.category_id,
+            name: b.name,
+            target_amount: b.target_amount,
+            period: b.period,
+            start_date: b.start_date,
+          })));
+          setEncroachmentGoals(goalList.map((g) => ({
+            id: g.id,
+            owner_user_id: g.owner_user_id,
+            owner_household_id: g.owner_household_id,
+            name: g.name,
+            target_amount: g.target_amount,
+            target_date: g.target_date ?? undefined,
+            status: g.status,
+          })));
+          setEncroachmentOpen(true);
+        } catch {
+          toast.error("Gagal memuat data reservasi untuk encroachment.");
+        }
+      } else {
+        toast.error("Gagal mencatat transaksi", { description: response?.data?.message });
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleConfirmEncroachment = (allocations: Array<{ budget_id?: string; goal_id?: string; amount: number }>) => {
-    if (!pendingTxData) return;
-
-    const res = store.addTransactionWithEncroachmentCheck(pendingTxData, allocations);
-    if (res.success) {
+  const handleConfirmEncroachment = async (
+    allocations: Array<{ budget_id?: string; goal_id?: string; amount: number }>
+  ) => {
+    setIsSubmitting(true);
+    try {
+      await submitTransaction(allocations);
+      toast.success("Transaksi berhasil dicatat dengan atribusi encroachment!");
       setTxAmount("");
       setTxNote("");
-      setPendingTxData(null);
       setEncroachmentOpen(false);
       setIsTxOpen(false);
+      loadData();
+    } catch (err) {
+      const description =
+        err && typeof err === "object" && "response" in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      toast.error("Gagal mencatat transaksi", { description });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleCreateTransfer = (e: React.FormEvent) => {
+  const handleVoidTransaction = async (id: string) => {
+    try {
+      await transactionsService.voidTransaction(id);
+      toast.info("Transaksi berhasil di-void / dibatalkan");
+      loadData();
+    } catch {
+      toast.error("Gagal membatalkan transaksi.");
+    }
+  };
+
+  const handleCreateTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseFloat(trAmount) || 0;
     const fee = parseFloat(trFee) || 0;
 
     if (!trFromWalletId || !trToWalletId || amount <= 0) return;
 
-    const success = store.addTransfer(trFromWalletId, trToWalletId, amount, fee, trDate, trNote);
-    if (success) {
+    setIsSubmitting(true);
+    try {
+      await transfersService.createTransfer({
+        from_wallet_id: trFromWalletId,
+        to_wallet_id: trToWalletId,
+        amount,
+        fee,
+        date: trDate,
+      });
+      toast.success(`Transfer sebesar ${formatRupiah(amount)} berhasil!`);
       setTrAmount("");
       setTrFee("0");
-      setTrNote("");
       setIsTxOpen(false);
+      loadData();
+    } catch (err) {
+      const description =
+        err && typeof err === "object" && "response" in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      toast.error("Gagal membuat transfer", { description });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // Filter transactions based on role
-  const rawFilteredTransactions = useMemo(() => {
-    return store.transactions.filter((tx) => {
-      if (store.activeRole === "admin") return true;
-      return accessibleWallets.some((w) => w.id === tx.wallet_id) || tx.owner_id === activeUser.id;
-    });
-  }, [store.transactions, store.activeRole, accessibleWallets, activeUser.id]);
+  const handleVoidTransfer = async (id: string) => {
+    try {
+      await transfersService.voidTransfer(id);
+      toast.info("Transfer berhasil dibatalkan / void");
+      loadData();
+    } catch {
+      toast.error("Gagal membatalkan transfer.");
+    }
+  };
+
+  // Backend GET /transactions sudah membatasi hasil sesuai wallet yang bisa diakses user.
+  const rawFilteredTransactions = transactions;
 
   // Data Controls for Transactions Tab
-  const txFilterConfigs = useMemo<FilterConfig<(typeof store.transactions)[0]>[]>(() => {
+  const txFilterConfigs = useMemo<FilterConfig<Transaction>[]>(() => {
     return [
       {
         id: "type",
@@ -200,13 +331,13 @@ export default function TransactionsPage() {
         id: "wallet_id",
         label: "Wallet",
         type: "select",
-        options: store.wallets.map((w) => ({ label: w.name, value: w.id })),
+        options: wallets.map((w) => ({ label: w.name, value: w.id })),
       },
       {
         id: "category_id",
         label: "Kategori",
         type: "select",
-        options: store.categories.map((c) => ({ label: c.name, value: c.id })),
+        options: categories.map((c) => ({ label: c.name, value: c.id })),
       },
       {
         id: "status",
@@ -218,7 +349,7 @@ export default function TransactionsPage() {
         ],
       },
     ];
-  }, [store.wallets, store.categories]);
+  }, [wallets, categories]);
 
   const txSortOptions = useMemo(() => {
     return [
@@ -262,7 +393,7 @@ export default function TransactionsPage() {
   const [trSortIndex, setTrSortIndex] = useState(0);
 
   const trControls = useDataControls({
-    data: store.transfers,
+    data: transfers,
     searchFields: ["note", "date"],
     initialSort: trSortOptions[0].rules,
     initialPageSize: 10,
@@ -283,7 +414,6 @@ export default function TransactionsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <ImportTransactionsDialog />
           {/* Unified Transaction & Transfer Dialog */}
           <Dialog open={isTxOpen} onOpenChange={setIsTxOpen}>
             <DialogTrigger asChild>
@@ -346,18 +476,6 @@ export default function TransactionsPage() {
                           <AlertTitle className="text-xs font-bold">Saldo Tidak Cukup</AlertTitle>
                           <AlertDescription className="text-xs">
                             Saldo dompet <strong>{selectedWallet?.name}</strong> hanya Rp {selectedWallet?.balance.toLocaleString("id-ID")}.
-                          </AlertDescription>
-                        </div>
-                      </Alert>
-                    )}
-
-                    {isOverbudget && (
-                      <Alert className="border-amber-500/30 text-amber-700 dark:text-amber-400 bg-amber-500/10 py-2.5">
-                        <WarningIcon className="size-4 text-amber-600 mt-0.5" />
-                        <div>
-                          <AlertTitle className="text-xs font-bold">Peringatan Overbudget</AlertTitle>
-                          <AlertDescription className="text-xs">
-                            Kategori <strong>{selectedCategory?.name}</strong> akan melebihi budget Rp {categoryBudget?.target_amount.toLocaleString("id-ID")}.
                           </AlertDescription>
                         </div>
                       </Alert>
@@ -467,7 +585,7 @@ export default function TransactionsPage() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {store.wallets.map((w) => (
+                            {wallets.map((w) => (
                               <SelectItem key={w.id} value={w.id}>
                                 {w.name} ({w.owner_user_id ? "Personal" : "Bersama"})
                               </SelectItem>
@@ -511,21 +629,11 @@ export default function TransactionsPage() {
                       />
                     </div>
 
-                    <div className="grid gap-1.5">
-                      <Label className="text-xs font-medium">Catatan / Keterangan</Label>
-                      <Input
-                        placeholder="Top up Kantong Jago / Transfer uang jajan..."
-                        className="h-9"
-                        value={trNote}
-                        onChange={(e) => setTrNote(e.target.value)}
-                      />
-                    </div>
-
                     <DialogFooter className="pt-2">
                       <Button type="button" variant="ghost" onClick={() => setIsTxOpen(false)}>
                         Batal
                       </Button>
-                      <Button type="submit" className="gap-1.5">
+                      <Button type="submit" disabled={isSubmitting} className="gap-1.5">
                         Eksekusi Transfer
                       </Button>
                     </DialogFooter>
@@ -549,7 +657,7 @@ export default function TransactionsPage() {
           </TabsTrigger>
           <TabsTrigger value="categories" className="gap-2">
             <TagIcon className="size-4" />
-            Kategori Transaksi ({store.categories.length})
+            Kategori Transaksi ({categories.length})
           </TabsTrigger>
         </TabsList>
 
@@ -582,9 +690,9 @@ export default function TransactionsPage() {
                 }}
               />
 
-              {store.simulatedError ? (
-                <ErrorState onRetry={() => store.setSimulatedError(false)} />
-              ) : store.simulatedLoading ? (
+              {hasError ? (
+                <ErrorState onRetry={loadData} />
+              ) : isLoading ? (
                 <DataTableSkeleton rows={5} cols={8} />
               ) : (
                 <Table>
@@ -617,10 +725,10 @@ export default function TransactionsPage() {
                       </TableRow>
                     ) : (
                     txControls.paginatedData.map((tx) => {
-                      const wallet = store.wallets.find((w) => w.id === tx.wallet_id);
-                      const category = store.categories.find((c) => c.id === tx.category_id);
-                      const owner = store.users.find((u) => u.id === tx.owner_id);
-                      const recorder = store.users.find((u) => u.id === tx.recorded_by);
+                      const wallet = wallets.find((w) => w.id === tx.wallet_id);
+                      const category = categories.find((c) => c.id === tx.category_id);
+                      const owner = members.find((m) => m.user_id === tx.owner_id);
+                      const recorder = members.find((m) => m.user_id === tx.recorded_by);
                       const isVoid = tx.status === "void";
 
                       return (
@@ -648,7 +756,7 @@ export default function TransactionsPage() {
                           <TableCell className="text-xs text-muted-foreground">{wallet?.name || "-"}</TableCell>
                           <TableCell className="text-xs">
                             <div>{owner?.name}</div>
-                            {recorder && recorder.id !== owner?.id && (
+                            {recorder && recorder.user_id !== owner?.user_id && (
                               <div className="text-[10px] text-muted-foreground">by {recorder.name}</div>
                             )}
                           </TableCell>
@@ -662,7 +770,7 @@ export default function TransactionsPage() {
                                 variant="ghost"
                                 size="sm"
                                 className="h-7 px-2 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                                onClick={() => store.voidTransaction(tx.id)}
+                                onClick={() => handleVoidTransaction(tx.id)}
                               >
                                 <ProhibitIcon className="size-3.5 mr-1" />
                                 Void
@@ -722,21 +830,32 @@ export default function TransactionsPage() {
                     <TableHead>Ke Wallet</TableHead>
                     <TableHead className="text-right">Nominal Transfer</TableHead>
                     <TableHead className="text-right">Biaya Admin</TableHead>
-                    <TableHead>Catatan</TableHead>
                     <TableHead className="text-center">Status & Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {trControls.paginatedData.length === 0 ? (
+                  {hasError ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
+                      <TableCell colSpan={6} className="p-0">
+                        <ErrorState onRetry={loadData} />
+                      </TableCell>
+                    </TableRow>
+                  ) : isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="p-0">
+                        <DataTableSkeleton rows={3} cols={6} />
+                      </TableCell>
+                    </TableRow>
+                  ) : trControls.paginatedData.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
                         Belum ada transfer dana yang sesuai.
                       </TableCell>
                     </TableRow>
                   ) : (
                     trControls.paginatedData.map((tr) => {
-                      const fromW = store.wallets.find((w) => w.id === tr.from_wallet_id);
-                      const toW = store.wallets.find((w) => w.id === tr.to_wallet_id);
+                      const fromW = wallets.find((w) => w.id === tr.from_wallet_id);
+                      const toW = wallets.find((w) => w.id === tr.to_wallet_id);
                       const isVoid = tr.status === "void";
 
                       return (
@@ -750,7 +869,6 @@ export default function TransactionsPage() {
                           <TableCell className="text-right text-xs text-muted-foreground">
                             {tr.fee > 0 ? formatRupiah(tr.fee) : "Gratis"}
                           </TableCell>
-                          <TableCell className="text-xs">{tr.note || "-"}</TableCell>
                           <TableCell className="text-center">
                             {isVoid ? (
                               <Badge variant="outline" className="text-[10px]">
@@ -761,7 +879,7 @@ export default function TransactionsPage() {
                                 variant="ghost"
                                 size="sm"
                                 className="h-7 px-2 text-xs text-rose-600 hover:text-rose-700"
-                                onClick={() => store.voidTransfer(tr.id)}
+                                onClick={() => handleVoidTransfer(tr.id)}
                               >
                                 <ProhibitIcon className="size-3.5 mr-1" />
                                 Void
@@ -792,13 +910,14 @@ export default function TransactionsPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Encroachment Dialog */}
       <EncroachmentDialog
         open={encroachmentOpen}
         onOpenChange={setEncroachmentOpen}
         shortfall={encroachmentShortfall}
         wallet={encroachmentWallet}
         reservations={encroachmentReservations}
+        budgets={encroachmentBudgets}
+        goals={encroachmentGoals}
         onConfirm={handleConfirmEncroachment}
       />
     </div>

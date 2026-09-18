@@ -15,62 +15,15 @@ export interface InvestmentItem {
   typeBadgeClass?: string;
 }
 
-export const DEFAULT_INVESTMENT_ITEMS: InvestmentItem[] = [
-  {
-    symbol: "BBCA.JK",
-    name: "Bank Central Asia",
-    type: "Saham",
-    badge: "BB",
-    costBasis: 450000000,
-    marketValue: 512450000,
-    unrealizedPl: 62450000,
-    unrealizedPlPercent: 13.8,
-    badgeColorClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-    typeBadgeClass: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-  },
-  {
-    symbol: "ETH/IDR",
-    name: "Ethereum Network",
-    type: "Crypto",
-    badge: "ET",
-    costBasis: 200000000,
-    marketValue: 245890000,
-    unrealizedPl: 45890000,
-    unrealizedPlPercent: 22.9,
-    badgeColorClass: "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20",
-    typeBadgeClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-  },
-  {
-    symbol: "Logam Mulia",
-    name: "Antam 24K Physical",
-    type: "Emas",
-    badge: "AU",
-    costBasis: 120000000,
-    marketValue: 125400000,
-    unrealizedPl: 5400000,
-    unrealizedPlPercent: 4.5,
-    badgeColorClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
-    typeBadgeClass: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
-  },
-  {
-    symbol: "TLKM.JK",
-    name: "Telkom Indonesia",
-    type: "Saham",
-    badge: "TL",
-    costBasis: 180000000,
-    marketValue: 172500000,
-    unrealizedPl: -7500000,
-    unrealizedPlPercent: -4.1,
-    badgeColorClass: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
-    typeBadgeClass: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-  },
-];
-
 interface InvestmentMarqueeProps {
-  items?: InvestmentItem[];
+  items: InvestmentItem[];
 }
 
-export function InvestmentMarquee({ items = DEFAULT_INVESTMENT_ITEMS }: InvestmentMarqueeProps) {
+export function InvestmentMarquee({ items }: InvestmentMarqueeProps) {
+  if (items.length === 0) {
+    return null;
+  }
+
   return (
     <div className="relative flex w-full max-w-full min-w-0 items-center overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_4%,black_96%,transparent)]">
       <Marquee pauseOnHover className="py-1" repeat={4}>

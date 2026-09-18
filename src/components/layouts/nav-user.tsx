@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigate } from "react-router-dom";
 import {
   Avatar,
   AvatarFallback,
@@ -21,38 +22,32 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { getInitials } from "@/libs/utils";
-import { useMockStore } from "@/lib/mock-store";
+import { useAuth } from "@/contexts/auth-context";
 import {
   CaretUpDownIcon,
-  SparkleIcon,
   CheckCircleIcon,
   CreditCardIcon,
   BellIcon,
   SignOutIcon,
   ShieldCheckIcon,
   UserIcon,
-  UserSwitchIcon,
 } from "@phosphor-icons/react";
 import { Badge } from "@/components/ui/badge";
 
-export function NavUser({
-  user: initialUser,
-}: {
-  user?: {
-    name: string;
-    email: string;
-    avatar: string;
-  };
-}) {
+export function NavUser() {
   const { isMobile } = useSidebar();
-  const store = useMockStore();
-  const activeUser = store.getActiveUser();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
-  const user = {
-    name: activeUser.name,
-    email: activeUser.email,
-    avatar: store.activeRole === "admin" ? "/avatars/shadcn.jpg" : "/avatars/annisa.jpg",
-    ...initialUser,
+  if (!user) {
+    return null;
+  }
+
+  const isAdmin = user.role === "admin";
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login", { replace: true });
   };
 
   return (
@@ -65,7 +60,7 @@ export function NavUser({
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
               <Avatar className="h-8 w-8 rounded-lg">
-                <AvatarImage src={user.avatar} alt={user.name} />
+                <AvatarImage alt={user.name} />
                 <AvatarFallback className="rounded-lg">{getInitials(user.name)}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
@@ -84,59 +79,25 @@ export function NavUser({
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={user.avatar} alt={user.name} />
+                  <AvatarImage alt={user.name} />
                   <AvatarFallback className="rounded-lg">{getInitials(user.name)}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium flex items-center justify-between">
                     {user.name}
-                    <Badge variant={store.activeRole === "admin" ? "default" : "secondary"} className="text-[10px] px-1.5 py-0 h-4 ml-1">
-                      {store.activeRole.toUpperCase()}
+                    <Badge variant={isAdmin ? "default" : "secondary"} className="text-[10px] px-1.5 py-0 h-4 ml-1 gap-1">
+                      {isAdmin ? (
+                        <ShieldCheckIcon className="size-3" />
+                      ) : (
+                        <UserIcon className="size-3" />
+                      )}
+                      {isAdmin ? "ADMIN" : "MEMBER"}
                     </Badge>
                   </span>
                   <span className="truncate text-xs text-muted-foreground">{user.email}</span>
                 </div>
               </div>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground flex items-center gap-1.5 px-2 py-1 font-semibold">
-              <UserSwitchIcon className="size-3.5" /> Switch User / Role
-            </DropdownMenuLabel>
-            <DropdownMenuGroup>
-              <DropdownMenuItem
-                onClick={() => store.setRole("admin")}
-                className={`cursor-pointer flex items-center justify-between ${store.activeRole === "admin" ? "bg-accent font-medium" : ""}`}
-              >
-                <div className="flex items-center gap-2">
-                  <ShieldCheckIcon className="size-4 text-emerald-500" />
-                  <div className="flex flex-col text-xs">
-                    <span className="font-semibold">Bayu</span>
-                    <span className="text-[10px] text-muted-foreground">Admin / Kepala Keluarga</span>
-                  </div>
-                </div>
-                {store.activeRole === "admin" && <CheckCircleIcon className="size-4 text-emerald-500" />}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => store.setRole("member")}
-                className={`cursor-pointer flex items-center justify-between ${store.activeRole === "member" ? "bg-accent font-medium" : ""}`}
-              >
-                <div className="flex items-center gap-2">
-                  <UserIcon className="size-4 text-blue-500" />
-                  <div className="flex flex-col text-xs">
-                    <span className="font-semibold">Annisa</span>
-                    <span className="text-[10px] text-muted-foreground">Member / Pasangan</span>
-                  </div>
-                </div>
-                {store.activeRole === "member" && <CheckCircleIcon className="size-4 text-blue-500" />}
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <SparkleIcon />
-                Upgrade to Pro
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem>
@@ -153,7 +114,7 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={handleLogout}>
               <SignOutIcon />
               Log out
             </DropdownMenuItem>
@@ -163,4 +124,3 @@ export function NavUser({
     </SidebarMenu>
   );
 }
-

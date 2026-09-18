@@ -1,5 +1,11 @@
-import { useState, useMemo } from "react";
-import { useMockStore } from "@/lib/mock-store";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { toast } from "sonner";
+import * as budgetsService from "@/services/budgets.service";
+import * as goalsService from "@/services/goals.service";
+import * as walletsService from "@/services/wallets.service";
+import * as categoriesService from "@/services/categories.service";
+import type { BudgetProgressResponse } from "@/services/budgets.service";
+import type { GoalProgressResponse } from "@/services/goals.service";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,10 +26,79 @@ import {
 import { BudgetFormDialog } from "@/components/feature/budgets/budget-form-dialog";
 import { GoalFormDialog } from "@/components/feature/budgets/goal-form-dialog";
 import { EncroachmentHistoryDialog } from "@/components/feature/budgets/encroachment-history-dialog";
-import type { Budget, Goal } from "@/types";
+import { DataTableSkeleton } from "@/components/common/loading-skeleton";
+import { ErrorState } from "@/components/common/error-state";
+import type { Budget, Goal, Category, Wallet, Reservation } from "@/types";
+
+function toBudgetType(res: BudgetProgressResponse): Budget {
+  return {
+    id: res.id,
+    owner_user_id: res.owner_user_id,
+    owner_household_id: res.owner_household_id,
+    category_id: res.category_id,
+    name: res.name,
+    target_amount: res.target_amount,
+    period: res.period,
+    start_date: res.start_date,
+  };
+}
+
+function toGoalType(res: GoalProgressResponse): Goal {
+  return {
+    id: res.id,
+    owner_user_id: res.owner_user_id,
+    owner_household_id: res.owner_household_id,
+    name: res.name,
+    target_amount: res.target_amount,
+    target_date: res.target_date ?? undefined,
+    status: res.status,
+  };
+}
 
 export default function BudgetsPage() {
-  const store = useMockStore();
+  const [budgetSummaries, setBudgetSummaries] = useState<BudgetProgressResponse[]>([]);
+  const [goalSummaries, setGoalSummaries] = useState<GoalProgressResponse[]>([]);
+  const [budgetReservations, setBudgetReservations] = useState<Record<string, Reservation[]>>({});
+  const [goalReservations, setGoalReservations] = useState<Record<string, Reservation[]>>({});
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setHasError(false);
+    try {
+      const [budgetList, goalList, categoryList, walletList] = await Promise.all([
+        budgetsService.listBudgets(),
+        goalsService.listGoals(),
+        categoriesService.listCategories(),
+        walletsService.listWallets(),
+      ]);
+      setBudgetSummaries(budgetList);
+      setGoalSummaries(goalList);
+      setCategories(categoryList);
+      setWallets(walletList);
+
+      const budgetResEntries = await Promise.all(
+        budgetList.map(async (b) => [b.id, await budgetsService.listBudgetReservations(b.id)] as const)
+      );
+      setBudgetReservations(Object.fromEntries(budgetResEntries));
+
+      const goalResEntries = await Promise.all(
+        goalList.map(async (g) => [g.id, await goalsService.listGoalReservations(g.id)] as const)
+      );
+      setGoalReservations(Object.fromEntries(goalResEntries));
+    } catch {
+      setHasError(true);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Dialog State
   const [isBudgetFormOpen, setIsBudgetFormOpen] = useState(false);
@@ -39,27 +114,15 @@ export default function BudgetsPage() {
   // Active Tab
   const [activeTab, setActiveTab] = useState<"budgets" | "goals">("budgets");
 
-  // Summary Metrics for Budgets
-  const budgetSummaries = useMemo(() => {
-    return store.budgets.map((b) => store.getBudgetProgress(b.id)).filter(Boolean);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store.budgets, store.transactions, store.budgetPeriods, store.reservations]);
+  const totalBudgetTarget = budgetSummaries.reduce((sum, item) => sum + item.effective_target, 0);
+  const totalBudgetSpent = budgetSummaries.reduce((sum, item) => sum + item.spent_amount, 0);
+  const totalCarriedDeficit = budgetSummaries.reduce((sum, item) => sum + item.carried_deficit, 0);
+  const totalBudgetReservations = budgetSummaries.reduce((sum, item) => sum + item.total_reserved, 0);
 
-  const totalBudgetTarget = budgetSummaries.reduce((sum, item) => sum + (item?.effectiveTarget || 0), 0);
-  const totalBudgetSpent = budgetSummaries.reduce((sum, item) => sum + (item?.spentAmount || 0), 0);
-  const totalCarriedDeficit = budgetSummaries.reduce((sum, item) => sum + (item?.carriedDeficit || 0), 0);
-  const totalBudgetReservations = budgetSummaries.reduce((sum, item) => sum + (item?.totalReserved || 0), 0);
-
-  // Summary Metrics for Goals
-  const goalSummaries = useMemo(() => {
-    return store.goals.map((g) => store.getGoalProgress(g.id)).filter(Boolean);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store.goals, store.reservations]);
-
-  const totalGoalTarget = goalSummaries.reduce((sum, item) => sum + (item?.goal.target_amount || 0), 0);
-  const totalGoalReserved = goalSummaries.reduce((sum, item) => sum + (item?.totalReserved || 0), 0);
+  const totalGoalTarget = goalSummaries.reduce((sum, item) => sum + item.target_amount, 0);
+  const totalGoalReserved = goalSummaries.reduce((sum, item) => sum + item.total_reserved, 0);
   const averageGoalProgress = goalSummaries.length > 0
-    ? Math.round(goalSummaries.reduce((sum, item) => sum + (item?.progressPercent || 0), 0) / goalSummaries.length)
+    ? Math.round(goalSummaries.reduce((sum, item) => sum + item.progress_percent, 0) / goalSummaries.length)
     : 0;
 
   // Handlers for Budget
@@ -73,8 +136,24 @@ export default function BudgetsPage() {
     setIsBudgetFormOpen(true);
   };
 
-  const handleCloseBudgetPeriod = (budgetId: string) => {
-    store.closeBudgetPeriod(budgetId);
+  const handleCloseBudgetPeriod = async (budgetId: string) => {
+    try {
+      await budgetsService.closePeriod(budgetId);
+      toast.success("Periode budget berhasil ditutup & direset!");
+      loadData();
+    } catch {
+      toast.error("Gagal menutup periode budget.");
+    }
+  };
+
+  const handleDeleteBudget = async (budgetId: string, name: string) => {
+    try {
+      await budgetsService.deleteBudget(budgetId);
+      toast.success(`Budget "${name}" berhasil dihapus!`);
+      loadData();
+    } catch {
+      toast.error("Gagal menghapus budget.");
+    }
   };
 
   // Handlers for Goal
@@ -86,6 +165,16 @@ export default function BudgetsPage() {
   const handleOpenEditGoal = (goal: Goal) => {
     setGoalToEdit(goal);
     setIsGoalFormOpen(true);
+  };
+
+  const handleDeleteGoal = async (goalId: string, name: string) => {
+    try {
+      await goalsService.deleteGoal(goalId);
+      toast.success(`Goal "${name}" berhasil dihapus!`);
+      loadData();
+    } catch {
+      toast.error("Gagal menghapus goal.");
+    }
   };
 
   // Handlers for Encroachment History
@@ -100,6 +189,18 @@ export default function BudgetsPage() {
     setHistoryTargetBudget(null);
     setIsEncroachmentHistoryOpen(true);
   };
+
+  if (hasError) {
+    return <ErrorState onRetry={loadData} />;
+  }
+
+  if (isLoading) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8">
+        <DataTableSkeleton rows={4} cols={4} />
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 pb-12 xl:pb-8">
@@ -147,11 +248,11 @@ export default function BudgetsPage() {
         <TabsList className="grid w-full sm:w-fit sm:min-w-[380px] grid-cols-2 p-1 bg-muted/60 rounded-xl">
           <TabsTrigger value="budgets" className="gap-2 font-medium text-xs sm:text-sm rounded-lg px-3">
             <TargetIcon className="" />
-            <span className="truncate">Budget Berulang ({store.budgets.length})</span>
+            <span className="truncate">Budget Berulang ({budgetSummaries.length})</span>
           </TabsTrigger>
           <TabsTrigger value="goals" className="gap-2 font-medium text-xs sm:text-sm rounded-lg px-3">
             <TrendUpIcon className="" />
-            <span className="truncate">Financial Goals ({store.goals.length})</span>
+            <span className="truncate">Financial Goals ({goalSummaries.length})</span>
           </TabsTrigger>
         </TabsList>
 
@@ -217,7 +318,7 @@ export default function BudgetsPage() {
           </div>
 
           {/* Budget List Cards */}
-          {store.budgets.length === 0 ? (
+          {budgetSummaries.length === 0 ? (
             <Card className="p-8 sm:p-12 text-center border-dashed rounded-2xl">
               <TargetIcon className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
               <h3 className="font-semibold text-lg">Belum Ada Budget Berulang</h3>
@@ -231,12 +332,11 @@ export default function BudgetsPage() {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-              {store.budgets.map((budget) => {
-                const progress = store.getBudgetProgress(budget.id);
-                if (!progress) return null;
-
-                const category = store.categories.find((c) => c.id === budget.category_id);
-                const percent = Math.min(100, Math.round((progress.spentAmount / (progress.effectiveTarget || 1)) * 100));
+              {budgetSummaries.map((progress) => {
+                const budget = toBudgetType(progress);
+                const category = categories.find((c) => c.id === budget.category_id);
+                const percent = Math.min(100, Math.round((progress.spent_amount / (progress.effective_target || 1)) * 100));
+                const reservations = budgetReservations[budget.id] || [];
 
                 return (
                   <Card
@@ -260,16 +360,16 @@ export default function BudgetsPage() {
 
                       {/* Overbudget & Carried Deficit Warnings */}
                       <div className="flex flex-wrap items-center gap-1.5">
-                        {progress.carriedDeficit > 0 && (
+                        {progress.carried_deficit > 0 && (
                           <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 text-[10px] gap-1">
                             <WarningIcon className="w-3 h-3" />
-                            Defisit Terbawa: Rp {progress.carriedDeficit.toLocaleString("id-ID")}
+                            Defisit Terbawa: Rp {progress.carried_deficit.toLocaleString("id-ID")}
                           </Badge>
                         )}
-                        {progress.isOverbudget && (
+                        {progress.is_overbudget && (
                           <Badge variant="destructive" className="text-[10px] gap-1">
                             <WarningIcon className="w-3 h-3" />
-                            Overbudget Rp {progress.deficitAmount.toLocaleString("id-ID")}
+                            Overbudget Rp {progress.deficit_amount.toLocaleString("id-ID")}
                           </Badge>
                         )}
                       </div>
@@ -281,30 +381,30 @@ export default function BudgetsPage() {
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground font-medium">Realisasi Pengeluaran</span>
                           <span className="font-mono font-bold text-foreground">
-                            {percent}% (Rp {progress.spentAmount.toLocaleString("id-ID")})
+                            {percent}% (Rp {progress.spent_amount.toLocaleString("id-ID")})
                           </span>
                         </div>
                         <Progress
                           value={percent}
-                          className={`h-2 ${progress.isOverbudget ? "[&>div]:bg-destructive" : "[&>div]:bg-primary"}`}
+                          className={`h-2 ${progress.is_overbudget ? "[&>div]:bg-destructive" : "[&>div]:bg-primary"}`}
                         />
                         <div className="flex items-center justify-between text-[11px] text-muted-foreground font-mono">
-                          <span>Target Base: Rp {progress.baseTarget.toLocaleString("id-ID")}</span>
-                          <span>Total Target: Rp {progress.effectiveTarget.toLocaleString("id-ID")}</span>
+                          <span>Target Base: Rp {(progress.target_amount).toLocaleString("id-ID")}</span>
+                          <span>Total Target: Rp {progress.effective_target.toLocaleString("id-ID")}</span>
                         </div>
                       </div>
 
                       {/* Breakdown Reservasi Dompet (Many-to-Many) */}
                       <div className="space-y-2 pt-2 border-t border-border/60">
                         <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
-                          Dompet Penampung Reservasi ({progress.reservations.length})
+                          Dompet Penampung Reservasi ({reservations.length})
                         </span>
-                        {progress.reservations.length === 0 ? (
+                        {reservations.length === 0 ? (
                           <p className="text-xs text-muted-foreground italic">Belum ada reservasi dompet terikat.</p>
                         ) : (
                           <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
-                            {progress.reservations.map((res) => {
-                              const wallet = store.wallets.find((w) => w.id === res.wallet_id);
+                            {reservations.map((res) => {
+                              const wallet = wallets.find((w) => w.id === res.wallet_id);
                               return (
                                 <div
                                   key={res.id}
@@ -340,7 +440,7 @@ export default function BudgetsPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => store.deleteBudget(budget.id)}
+                              onClick={() => handleDeleteBudget(budget.id, budget.name)}
                               className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
                               title="Hapus Budget"
                             >
@@ -419,7 +519,7 @@ export default function BudgetsPage() {
               </CardHeader>
               <CardContent className="p-4.5 pt-0">
                 <span className="text-[11px] text-muted-foreground leading-tight block">
-                  Dari total {store.goals.length} target aktif
+                  Dari total {goalSummaries.length} target aktif
                 </span>
               </CardContent>
             </Card>
@@ -440,7 +540,7 @@ export default function BudgetsPage() {
           </div>
 
           {/* Goal List Cards */}
-          {store.goals.length === 0 ? (
+          {goalSummaries.length === 0 ? (
             <Card className="p-8 sm:p-12 text-center border-dashed rounded-2xl">
               <TrendUpIcon className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
               <h3 className="font-semibold text-lg">Belum Ada Financial Goal</h3>
@@ -454,9 +554,9 @@ export default function BudgetsPage() {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-              {store.goals.map((goal) => {
-                const progress = store.getGoalProgress(goal.id);
-                if (!progress) return null;
+              {goalSummaries.map((progress) => {
+                const goal = toGoalType(progress);
+                const reservations = goalReservations[goal.id] || [];
 
                 return (
                   <Card
@@ -493,12 +593,6 @@ export default function BudgetsPage() {
                               : "Aktif"}
                         </Badge>
                       </div>
-
-                      {goal.notes && (
-                        <p className="text-xs text-muted-foreground line-clamp-2 italic pt-0.5">
-                          "{goal.notes}"
-                        </p>
-                      )}
                     </CardHeader>
 
                     <CardContent className="p-5 pt-0 space-y-4">
@@ -507,30 +601,30 @@ export default function BudgetsPage() {
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground font-medium">Dana Terkumpul (Reservasi)</span>
                           <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                            {progress.progressPercent}% (Rp {progress.totalReserved.toLocaleString("id-ID")})
+                            {progress.progress_percent}% (Rp {progress.total_reserved.toLocaleString("id-ID")})
                           </span>
                         </div>
                         <Progress
-                          value={progress.progressPercent}
+                          value={progress.progress_percent}
                           className="h-2 [&>div]:bg-emerald-500"
                         />
                         <div className="flex items-center justify-between text-[11px] text-muted-foreground font-mono">
                           <span>Target: Rp {goal.target_amount.toLocaleString("id-ID")}</span>
-                          <span>Sisa: Rp {progress.remainingAmount.toLocaleString("id-ID")}</span>
+                          <span>Sisa: Rp {progress.remaining_amount.toLocaleString("id-ID")}</span>
                         </div>
                       </div>
 
                       {/* Breakdown Reservasi Dompet (Many-to-Many) */}
                       <div className="space-y-2 pt-2 border-t border-border/60">
                         <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
-                          Dompet Penampung ({progress.reservations.length})
+                          Dompet Penampung ({reservations.length})
                         </span>
-                        {progress.reservations.length === 0 ? (
+                        {reservations.length === 0 ? (
                           <p className="text-xs text-muted-foreground italic">Belum ada dompet penampung yang dialokasikan.</p>
                         ) : (
                           <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
-                            {progress.reservations.map((res) => {
-                              const wallet = store.wallets.find((w) => w.id === res.wallet_id);
+                            {reservations.map((res) => {
+                              const wallet = wallets.find((w) => w.id === res.wallet_id);
                               return (
                                 <div
                                   key={res.id}
@@ -566,7 +660,7 @@ export default function BudgetsPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => store.deleteGoal(goal.id)}
+                              onClick={() => handleDeleteGoal(goal.id, goal.name)}
                               className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
                               title="Hapus Goal"
                             >
@@ -599,12 +693,14 @@ export default function BudgetsPage() {
         open={isBudgetFormOpen}
         onOpenChange={setIsBudgetFormOpen}
         budgetToEdit={budgetToEdit}
+        onSaved={loadData}
       />
 
       <GoalFormDialog
         open={isGoalFormOpen}
         onOpenChange={setIsGoalFormOpen}
         goalToEdit={goalToEdit}
+        onSaved={loadData}
       />
 
       <EncroachmentHistoryDialog

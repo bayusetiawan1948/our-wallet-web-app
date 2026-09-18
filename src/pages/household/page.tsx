@@ -1,5 +1,9 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useMockStore } from "@/lib/mock-store";
+import * as auditLogsService from "@/services/audit-logs.service";
+import * as householdsService from "@/services/households.service";
+import type { HouseholdMemberResponse } from "@/services/households.service";
+import type { AuditLogResponse } from "@/services/audit-logs.service";
 import { useDataControls, type FilterConfig } from "@/hooks/use-data-controls";
 import { DataTableToolbar } from "@/components/common/data-table-toolbar";
 import { DataPagination } from "@/components/common/data-table-pagination";
@@ -73,6 +77,33 @@ export default function HouseholdPage() {
   const isAdmin = store.activeRole === "admin";
   const activeUser = store.getActiveUser();
 
+  // Audit Logs (real API)
+  const [auditLogs, setAuditLogs] = useState<AuditLogResponse[]>([]);
+  const [auditMembers, setAuditMembers] = useState<HouseholdMemberResponse[]>([]);
+  const [isAuditLoading, setIsAuditLoading] = useState(true);
+  const [hasAuditError, setHasAuditError] = useState(false);
+
+  const loadAuditLogs = useCallback(async () => {
+    setIsAuditLoading(true);
+    setHasAuditError(false);
+    try {
+      const [logs, members] = await Promise.all([
+        auditLogsService.listAuditLogs(),
+        householdsService.listMembers(),
+      ]);
+      setAuditLogs(logs);
+      setAuditMembers(members);
+    } catch {
+      setHasAuditError(true);
+    } finally {
+      setIsAuditLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAuditLogs();
+  }, [loadAuditLogs]);
+
   // Add Member State
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [memberName, setMemberName] = useState("");
@@ -129,8 +160,8 @@ export default function HouseholdPage() {
   const [auditSortIndex, setAuditSortIndex] = useState(0);
 
   const auditControls = useDataControls({
-    data: store.auditLogs,
-    searchFields: ["actor_name", "action", "details"],
+    data: auditLogs,
+    searchFields: ["action", "entity_type"],
     initialSort: auditSortOptions[0].rules,
     initialPageSize: 10,
   });
@@ -293,7 +324,7 @@ export default function HouseholdPage() {
           </TabsTrigger>
           <TabsTrigger value="audit-logs" className="gap-2">
             <ListDashesIcon className="size-4" />
-            Audit Logs ({store.auditLogs.length})
+            Audit Logs ({auditLogs.length})
           </TabsTrigger>
         </TabsList>
 
@@ -545,10 +576,10 @@ export default function HouseholdPage() {
                 }}
               />
 
-              {store.simulatedError ? (
-                <ErrorState onRetry={() => store.setSimulatedError(false)} />
-              ) : store.simulatedLoading ? (
-                <DataTableSkeleton rows={5} cols={5} />
+              {hasAuditError ? (
+                <ErrorState onRetry={loadAuditLogs} />
+              ) : isAuditLoading ? (
+                <DataTableSkeleton rows={5} cols={4} />
               ) : (
                 <Table>
                   <TableHeader>
@@ -557,13 +588,12 @@ export default function HouseholdPage() {
                       <TableHead>Pengguna (Actor)</TableHead>
                       <TableHead>Aksi</TableHead>
                       <TableHead>Tipe Entity</TableHead>
-                      <TableHead>Detail Perubahan</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {auditControls.paginatedData.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="p-0">
+                        <TableCell colSpan={4} className="p-0">
                           <EmptyState
                             title="Belum Ada Log Aktivitas"
                             description="Belum ada pencatatan aktivitas atau perubahan sistem yang terekam."
@@ -573,21 +603,23 @@ export default function HouseholdPage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                    auditControls.paginatedData.map((log) => (
+                    auditControls.paginatedData.map((log) => {
+                      const actor = auditMembers.find((m) => m.user_id === log.actor_id);
+                      return (
                       <TableRow key={log.id}>
                         <TableCell className="font-mono text-xs text-muted-foreground">
-                          {log.created_at}
+                          {new Date(log.created_at).toLocaleString("id-ID")}
                         </TableCell>
-                        <TableCell className="font-medium text-xs">{log.actor_name}</TableCell>
+                        <TableCell className="font-medium text-xs">{actor?.name || log.actor_id}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className="text-[10px] font-mono">
                             {log.action}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">{log.entity_type}</TableCell>
-                        <TableCell className="text-xs">{log.details}</TableCell>
                       </TableRow>
-                    ))
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>

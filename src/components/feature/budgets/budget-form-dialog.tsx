@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -18,16 +19,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PlusIcon, TrashIcon } from "@phosphor-icons/react";
-import { useMockStore } from "@/lib/mock-store";
+import { useAuth } from "@/contexts/auth-context";
+import * as budgetsService from "@/services/budgets.service";
+import * as reservationsService from "@/services/reservations.service";
+import * as categoriesService from "@/services/categories.service";
+import * as walletsService from "@/services/wallets.service";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { formatRupiah } from "@/libs/number";
-import type { Budget, BudgetPeriod, AllocationMethod } from "@/types";
-
+import type { Budget, BudgetPeriod, AllocationMethod, Category, Wallet } from "@/types";
 
 interface BudgetFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   budgetToEdit?: Budget | null;
+  onSaved?: () => void;
 }
 
 interface ReservationInput {
@@ -40,54 +45,79 @@ interface ReservationInput {
 function BudgetFormDialogContent({
   budgetToEdit,
   onClose,
+  onSaved,
 }: {
   budgetToEdit?: Budget | null;
   onClose: () => void;
+  onSaved?: () => void;
 }) {
-  const store = useMockStore();
-  const activeWallets = store.getAccessibleWallets();
-  const expenseCategories = store.categories.filter((c) => c.type === "expense" || c.type === "both");
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+
+  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const expenseCategories = categories.filter((c) => c.type === "expense" || c.type === "both");
 
   const [name, setName] = useState(() => budgetToEdit?.name || "");
-  const [categoryId, setCategoryId] = useState(() => budgetToEdit?.category_id || expenseCategories[0]?.id || "");
+  const [categoryId, setCategoryId] = useState(() => budgetToEdit?.category_id || "");
   const [targetAmount, setTargetAmount] = useState(() => budgetToEdit?.target_amount.toString() || "");
   const [period, setPeriod] = useState<BudgetPeriod>(() => budgetToEdit?.period || "monthly");
   const [ownerType, setOwnerType] = useState<"user" | "household">(() => (budgetToEdit?.owner_user_id ? "user" : "household"));
+  const [reservations, setReservations] = useState<ReservationInput[]>([]);
+  const [existingReservationIds, setExistingReservationIds] = useState<string[]>([]);
 
-  const [reservations, setReservations] = useState<ReservationInput[]>(() => {
-    if (budgetToEdit) {
-      const existingRes = store.reservations.filter((r) => r.budget_id === budgetToEdit.id);
-      return existingRes.map((r) => ({
-        wallet_id: r.wallet_id,
-        reserved_amount: r.reserved_amount,
-        allocation_method: r.allocation_method,
-        percentage: r.allocation_config?.percentage || 0,
-      }));
-    }
-    if (activeWallets.length > 0) {
-      return [
-        {
-          wallet_id: activeWallets[0].id,
-          reserved_amount: 0,
-          allocation_method: "manual",
-        },
-      ];
-    }
-    return [];
-  });
+  useEffect(() => {
+    (async () => {
+      setIsLoadingData(true);
+      try {
+        const [walletList, categoryList] = await Promise.all([
+          walletsService.listWallets(),
+          categoriesService.listCategories(),
+        ]);
+        setWallets(walletList);
+        setCategories(categoryList);
+
+        if (!categoryId && categoryList.length > 0) {
+          const firstExpense = categoryList.find((c) => c.type === "expense" || c.type === "both");
+          setCategoryId(firstExpense?.id || "");
+        }
+
+        if (budgetToEdit) {
+          const existing = await budgetsService.listBudgetReservations(budgetToEdit.id);
+          setExistingReservationIds(existing.map((r) => r.id));
+          setReservations(
+            existing.map((r) => ({
+              wallet_id: r.wallet_id,
+              reserved_amount: r.reserved_amount,
+              allocation_method: r.allocation_method as AllocationMethod,
+              percentage: (r.allocation_config as { percentage?: number } | null)?.percentage || 0,
+            }))
+          );
+        } else if (walletList.length > 0) {
+          setReservations([
+            { wallet_id: walletList[0].id, reserved_amount: 0, allocation_method: "manual" },
+          ]);
+        }
+      } catch {
+        toast.error("Gagal memuat data wallet/kategori.");
+      } finally {
+        setIsLoadingData(false);
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    })();
+  }, []);
 
   const handleAddReservationRow = () => {
-    const unselectedWallet = activeWallets.find(
+    const unselectedWallet = wallets.find(
       (w) => !reservations.some((r) => r.wallet_id === w.id)
     );
-    const walletId = unselectedWallet ? unselectedWallet.id : activeWallets[0]?.id || "";
+    const walletId = unselectedWallet ? unselectedWallet.id : wallets[0]?.id || "";
     setReservations((prev) => [
       ...prev,
-      {
-        wallet_id: walletId,
-        reserved_amount: 0,
-        allocation_method: "manual",
-      },
+      { wallet_id: walletId, reserved_amount: 0, allocation_method: "manual" },
     ]);
   };
 
@@ -105,38 +135,66 @@ function BudgetFormDialogContent({
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !categoryId || !targetAmount) return;
 
     const targetVal = parseFloat(targetAmount) || 0;
-    const formattedReservations = reservations.map((r) => ({
-      wallet_id: r.wallet_id,
-      reserved_amount: r.reserved_amount || 0,
-      allocation_method: r.allocation_method,
-      allocation_config: r.allocation_method === "percentage" ? { percentage: r.percentage || 0 } : undefined,
-    }));
+    setIsSubmitting(true);
 
-    if (budgetToEdit) {
-      store.updateBudget(budgetToEdit.id, {
-        name: name.trim(),
-        category_id: categoryId,
-        target_amount: targetVal,
-        period,
-        reservations: formattedReservations,
-      });
-    } else {
-      store.addBudget({
-        name: name.trim(),
-        category_id: categoryId,
-        target_amount: targetVal,
-        period,
-        ownerType,
-        reservations: formattedReservations,
-      });
+    try {
+      let budgetId: string;
+
+      if (budgetToEdit) {
+        await budgetsService.updateBudget(budgetToEdit.id, {
+          name: name.trim(),
+          category_id: categoryId,
+          target_amount: targetVal,
+          period,
+        });
+        budgetId = budgetToEdit.id;
+
+        await Promise.all(
+          existingReservationIds.map((id) => reservationsService.deleteReservation(id))
+        );
+      } else {
+        const created = await budgetsService.createBudget({
+          owner_type: ownerType,
+          name: name.trim(),
+          category_id: categoryId,
+          target_amount: targetVal,
+          period,
+        });
+        budgetId = created.id;
+      }
+
+      await Promise.all(
+        reservations
+          .filter((r) => r.reserved_amount > 0)
+          .map((r) =>
+            reservationsService.createReservation({
+              wallet_id: r.wallet_id,
+              budget_id: budgetId,
+              reserved_amount: r.reserved_amount,
+              allocation_method: r.allocation_method,
+              allocation_config:
+                r.allocation_method === "percentage" ? { percentage: r.percentage || 0 } : undefined,
+            })
+          )
+      );
+
+      toast.success(budgetToEdit ? "Budget berhasil diperbarui!" : "Budget berhasil dibuat!");
+      onSaved?.();
+      onClose();
+    } catch (err) {
+      const description =
+        err && typeof err === "object" && "response" in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      toast.error("Gagal menyimpan budget", { description });
+    } finally {
+      setIsSubmitting(false);
     }
-
-    onClose();
   };
 
   const totalReservedInForm = reservations.reduce((sum, r) => sum + (r.reserved_amount || 0), 0);
@@ -212,31 +270,35 @@ function BudgetFormDialogContent({
         </div>
 
         {/* Owner Type */}
-        <div className="space-y-2">
-          <Label>Kepemilikan Budget</Label>
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 cursor-pointer text-sm">
-              <input
-                type="radio"
-                name="owner"
-                checked={ownerType === "household"}
-                onChange={() => setOwnerType("household")}
-                className="accent-primary"
-              />
-              <span>Household (Gabungan Keluarga)</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer text-sm">
-              <input
-                type="radio"
-                name="owner"
-                checked={ownerType === "user"}
-                onChange={() => setOwnerType("user")}
-                className="accent-primary"
-              />
-              <span>Pribadi ({store.getActiveUser().name})</span>
-            </label>
+        {!budgetToEdit && (
+          <div className="space-y-2">
+            <Label>Kepemilikan Budget</Label>
+            <div className="flex items-center gap-4">
+              {isAdmin && (
+                <label className="flex items-center gap-2 cursor-pointer text-sm">
+                  <input
+                    type="radio"
+                    name="owner"
+                    checked={ownerType === "household"}
+                    onChange={() => setOwnerType("household")}
+                    className="accent-primary"
+                  />
+                  <span>Household (Gabungan Keluarga)</span>
+                </label>
+              )}
+              <label className="flex items-center gap-2 cursor-pointer text-sm">
+                <input
+                  type="radio"
+                  name="owner"
+                  checked={ownerType === "user"}
+                  onChange={() => setOwnerType("user")}
+                  className="accent-primary"
+                />
+                <span>Pribadi</span>
+              </label>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Sub-Section Reservasi Dompet */}
         <div className="space-y-3 pt-2 border-t border-border">
@@ -253,6 +315,7 @@ function BudgetFormDialogContent({
               size="xs"
               onClick={handleAddReservationRow}
               className="gap-1 text-xs"
+              disabled={isLoadingData}
             >
               <PlusIcon className="w-3.5 h-3.5" />
               Tambah Dompet
@@ -260,7 +323,7 @@ function BudgetFormDialogContent({
           </div>
 
           {reservations.map((res, index) => {
-            const walletBreakdown = store.getWalletBalanceBreakdown(res.wallet_id);
+            const wallet = wallets.find((w) => w.id === res.wallet_id);
             return (
               <div
                 key={index}
@@ -277,7 +340,7 @@ function BudgetFormDialogContent({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {activeWallets.map((w) => (
+                        {wallets.map((w) => (
                           <SelectItem key={w.id} value={w.id}>
                             {w.name}
                           </SelectItem>
@@ -330,10 +393,9 @@ function BudgetFormDialogContent({
                   </div>
                 </div>
 
-                {walletBreakdown.wallet && (
+                {wallet && (
                   <div className="text-[11px] text-muted-foreground font-mono flex items-center justify-between px-1">
-                    <span>Saldo Total: {formatRupiah(walletBreakdown.totalBalance)}</span>
-                    <span>Saldo Bebas Sekarang: {formatRupiah(walletBreakdown.freeBalance)}</span>
+                    <span>Saldo Wallet: {formatRupiah(wallet.balance)}</span>
                   </div>
                 )}
               </div>
@@ -353,7 +415,7 @@ function BudgetFormDialogContent({
         <Button type="button" variant="outline" onClick={onClose}>
           Batal
         </Button>
-        <Button type="submit" className="bg-primary text-primary-foreground font-medium">
+        <Button type="submit" disabled={isSubmitting || isLoadingData} className="bg-primary text-primary-foreground font-medium">
           {budgetToEdit ? "Simpan Perubahan" : "Buat Budget"}
         </Button>
       </DialogFooter>
@@ -365,6 +427,7 @@ export function BudgetFormDialog({
   open,
   onOpenChange,
   budgetToEdit,
+  onSaved,
 }: BudgetFormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -374,6 +437,7 @@ export function BudgetFormDialog({
             key={budgetToEdit ? budgetToEdit.id : "new-budget"}
             budgetToEdit={budgetToEdit}
             onClose={() => onOpenChange(false)}
+            onSaved={onSaved}
           />
         )}
       </DialogContent>

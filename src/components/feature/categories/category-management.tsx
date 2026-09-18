@@ -1,5 +1,7 @@
-import React, { useState, useMemo } from "react";
-import { useMockStore } from "@/lib/mock-store";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { toast } from "sonner";
+import * as categoriesService from "@/services/categories.service";
+import { useAuth } from "@/contexts/auth-context";
 import { type Category, type CategoryType } from "@/types";
 import { useDataControls, type FilterConfig } from "@/hooks/use-data-controls";
 import { DataTableToolbar } from "@/components/common/data-table-toolbar";
@@ -99,8 +101,26 @@ export function getCategoryIcon(iconName?: string): React.ElementType {
 }
 
 export function CategoryManagement() {
-  const store = useMockStore();
-  const isAdmin = store.activeRole === "admin";
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+
+  const loadCategories = useCallback(() => {
+    setIsLoading(true);
+    setHasError(false);
+    categoriesService
+      .listCategories()
+      .then(setCategories)
+      .catch(() => setHasError(true))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  useEffect(() => {
+    loadCategories();
+  }, [loadCategories]);
 
   // Form Dialog state (Add / Edit)
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -109,9 +129,11 @@ export function CategoryManagement() {
   const [formType, setFormType] = useState<CategoryType>("expense");
   const [formIcon, setFormIcon] = useState("Tag");
   const [formIsActive, setFormIsActive] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Delete Alert Dialog state
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const openCreateDialog = () => {
     setEditingCategory(null);
@@ -131,32 +153,62 @@ export function CategoryManagement() {
     setIsFormOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) return;
 
-    if (editingCategory) {
-      const success = store.updateCategory(editingCategory.id, {
-        name: formName,
-        type: formType,
-        icon: formIcon,
-        is_active: formIsActive,
-      });
-      if (success) setIsFormOpen(false);
-    } else {
-      const success = store.addCategory({
-        name: formName,
-        type: formType,
-        icon: formIcon,
-      });
-      if (success) setIsFormOpen(false);
+    setIsSubmitting(true);
+    try {
+      if (editingCategory) {
+        await categoriesService.updateCategory(editingCategory.id, {
+          name: formName,
+          type: formType,
+          icon: formIcon,
+          is_hidden: !formIsActive,
+        });
+        toast.success(`Kategori "${formName}" berhasil diperbarui!`);
+      } else {
+        await categoriesService.createCategory({
+          name: formName,
+          type: formType,
+          icon: formIcon,
+        });
+        toast.success(`Kategori "${formName}" berhasil dibuat!`);
+      }
+      setIsFormOpen(false);
+      loadCategories();
+    } catch {
+      toast.error("Gagal menyimpan kategori. Coba lagi.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deletingCategory) return;
-    store.deleteCategory(deletingCategory.id);
-    setDeletingCategory(null);
+    setIsDeleting(true);
+    try {
+      await categoriesService.deleteCategory(deletingCategory.id);
+      toast.success(`Kategori "${deletingCategory.name}" berhasil dihapus!`);
+      setDeletingCategory(null);
+      loadCategories();
+    } catch {
+      toast.error("⚠️ KATEGORI TIDAK DAPAT DIHAPUS!", {
+        description: `Kategori "${deletingCategory.name}" masih terikat dengan data lain atau merupakan kategori sistem.`,
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleToggleStatus = async (category: Category) => {
+    try {
+      await categoriesService.toggleCategoryStatus(category.id);
+      toast.info(`Kategori "${category.name}" sekarang ${category.is_active ? "Non-aktif" : "Aktif"}`);
+      loadCategories();
+    } catch {
+      toast.error("Gagal mengubah status kategori.");
+    }
   };
 
   // Filter categories with useDataControls
@@ -195,7 +247,7 @@ export function CategoryManagement() {
   const [catSortIndex, setCatSortIndex] = useState(0);
 
   const catControls = useDataControls<Category>({
-    data: store.categories,
+    data: categories,
     searchFields: ["name", "id"],
     searchPredicate: (item, q) => item.name.toLowerCase().includes(q) || item.id.toLowerCase().includes(q),
     initialSort: catSortOptions[0].rules,
@@ -203,10 +255,10 @@ export function CategoryManagement() {
   });
 
   // Statistics
-  const totalCategories = store.categories.length;
-  const incomeCategoriesCount = store.categories.filter((c) => c.type === "income").length;
-  const expenseCategoriesCount = store.categories.filter((c) => c.type === "expense").length;
-  const bothCategoriesCount = store.categories.filter((c) => c.type === "both").length;
+  const totalCategories = categories.length;
+  const incomeCategoriesCount = categories.filter((c) => c.type === "income").length;
+  const expenseCategoriesCount = categories.filter((c) => c.type === "expense").length;
+  const bothCategoriesCount = categories.filter((c) => c.type === "both").length;
 
   return (
     <div className="space-y-6">
@@ -308,9 +360,9 @@ export function CategoryManagement() {
 
       {/* Category Table List */}
       <Card className="shadow-none border-border/60 overflow-hidden">
-        {store.simulatedError ? (
-          <ErrorState onRetry={() => store.setSimulatedError(false)} />
-        ) : store.simulatedLoading ? (
+        {hasError ? (
+          <ErrorState onRetry={loadCategories} />
+        ) : isLoading ? (
           <DataTableSkeleton rows={5} cols={6} />
         ) : (
           <CardContent className="p-0">
@@ -321,14 +373,13 @@ export function CategoryManagement() {
                 <TableHead>Nama Kategori</TableHead>
                 <TableHead>Tipe</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Penggunaan Data</TableHead>
                 <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {catControls.paginatedData.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="p-0">
+                  <TableCell colSpan={5} className="p-0">
                     <EmptyState
                       icon={TagIcon}
                       title="Tidak Ada Kategori"
@@ -343,7 +394,6 @@ export function CategoryManagement() {
               ) : (
                 catControls.paginatedData.map((category) => {
                 const IconComp = getCategoryIcon(category.icon);
-                const trackRecord = store.hasCategoryTrackRecord(category.id);
 
                 return (
                   <TableRow key={category.id} className={!category.is_active ? "opacity-60 bg-muted/20" : ""}>
@@ -398,7 +448,7 @@ export function CategoryManagement() {
                             <Switch
                               checked={category.is_active}
                               disabled={category.is_system}
-                              onCheckedChange={() => store.toggleCategoryStatus(category.id)}
+                              onCheckedChange={() => handleToggleStatus(category)}
                             />
                             <span className="text-xs font-medium">
                               {category.is_active ? (
@@ -414,17 +464,6 @@ export function CategoryManagement() {
                           </Badge>
                         )}
                       </div>
-                    </TableCell>
-
-                    {/* Track Record */}
-                    <TableCell>
-                      {trackRecord.hasRecord ? (
-                        <span className="text-xs text-muted-foreground font-medium">
-                          {trackRecord.details.join(", ")}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground/60 italic">Belum terpakai</span>
-                      )}
                     </TableCell>
 
                     {/* Actions */}
@@ -571,7 +610,7 @@ export function CategoryManagement() {
                 Batal
               </Button>
 
-              <Button type="submit">
+              <Button type="submit" disabled={isSubmitting}>
                 {editingCategory ? "Simpan Perubahan" : "Buat Kategori"}
               </Button>
             </DialogFooter>
@@ -587,19 +626,15 @@ export function CategoryManagement() {
               <TrashIcon className="size-5" />
               Hapus Kategori "{deletingCategory?.name}"?
             </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2">
-              <span>Tindakan ini tidak dapat dibatalkan. Kategori akan dihapus secara permanen.</span>
-              {deletingCategory && store.hasCategoryTrackRecord(deletingCategory.id).hasRecord && (
-                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-md text-xs text-rose-700 dark:text-rose-300">
-                  ⚠️ <strong>Peringatan Data Terikat:</strong> Kategori ini saat ini masih memiliki {store.hasCategoryTrackRecord(deletingCategory.id).details.join(", ")}. Penghapusan akan ditolak oleh sistem untuk menjaga integritas data.
-                </div>
-              )}
+            <AlertDialogDescription>
+              Tindakan ini tidak dapat dibatalkan. Kategori akan dihapus secara permanen. Jika kategori masih dipakai oleh transaksi, anggaran, atau sub-kategori, penghapusan akan ditolak oleh sistem.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Batal</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteConfirm}
+              disabled={isDeleting}
               className="bg-rose-600 hover:bg-rose-700 text-white"
             >
               Hapus Kategori

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -10,7 +11,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -19,16 +19,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PlusIcon, TrashIcon } from "@phosphor-icons/react";
-import { useMockStore } from "@/lib/mock-store";
+import { useAuth } from "@/contexts/auth-context";
+import * as goalsService from "@/services/goals.service";
+import * as reservationsService from "@/services/reservations.service";
+import * as walletsService from "@/services/wallets.service";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { formatRupiah } from "@/libs/number";
-import type { Goal, GoalStatus, AllocationMethod } from "@/types";
-
+import type { Goal, GoalStatus, AllocationMethod, Wallet } from "@/types";
 
 interface GoalFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   goalToEdit?: Goal | null;
+  onSaved?: () => void;
 }
 
 interface ReservationInput {
@@ -41,54 +44,67 @@ interface ReservationInput {
 function GoalFormDialogContent({
   goalToEdit,
   onClose,
+  onSaved,
 }: {
   goalToEdit?: Goal | null;
   onClose: () => void;
+  onSaved?: () => void;
 }) {
-  const store = useMockStore();
-  const activeWallets = store.getAccessibleWallets();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+
+  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [name, setName] = useState(() => goalToEdit?.name || "");
   const [targetAmount, setTargetAmount] = useState(() => goalToEdit?.target_amount.toString() || "");
   const [targetDate, setTargetDate] = useState(() => goalToEdit?.target_date || "");
   const [status, setStatus] = useState<GoalStatus>(() => goalToEdit?.status || "active");
-  const [notes, setNotes] = useState(() => goalToEdit?.notes || "");
   const [ownerType, setOwnerType] = useState<"user" | "household">(() => (goalToEdit?.owner_user_id ? "user" : "household"));
+  const [reservations, setReservations] = useState<ReservationInput[]>([]);
+  const [existingReservationIds, setExistingReservationIds] = useState<string[]>([]);
 
-  const [reservations, setReservations] = useState<ReservationInput[]>(() => {
-    if (goalToEdit) {
-      const existingRes = store.reservations.filter((r) => r.goal_id === goalToEdit.id);
-      return existingRes.map((r) => ({
-        wallet_id: r.wallet_id,
-        reserved_amount: r.reserved_amount,
-        allocation_method: r.allocation_method,
-        percentage: r.allocation_config?.percentage || 0,
-      }));
-    }
-    if (activeWallets.length > 0) {
-      return [
-        {
-          wallet_id: activeWallets[0].id,
-          reserved_amount: 0,
-          allocation_method: "manual",
-        },
-      ];
-    }
-    return [];
-  });
+  useEffect(() => {
+    (async () => {
+      setIsLoadingData(true);
+      try {
+        const walletList = await walletsService.listWallets();
+        setWallets(walletList);
+
+        if (goalToEdit) {
+          const existing = await goalsService.listGoalReservations(goalToEdit.id);
+          setExistingReservationIds(existing.map((r) => r.id));
+          setReservations(
+            existing.map((r) => ({
+              wallet_id: r.wallet_id,
+              reserved_amount: r.reserved_amount,
+              allocation_method: r.allocation_method as AllocationMethod,
+              percentage: (r.allocation_config as { percentage?: number } | null)?.percentage || 0,
+            }))
+          );
+        } else if (walletList.length > 0) {
+          setReservations([
+            { wallet_id: walletList[0].id, reserved_amount: 0, allocation_method: "manual" },
+          ]);
+        }
+      } catch {
+        toast.error("Gagal memuat data wallet.");
+      } finally {
+        setIsLoadingData(false);
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    })();
+  }, []);
 
   const handleAddReservationRow = () => {
-    const unselectedWallet = activeWallets.find(
+    const unselectedWallet = wallets.find(
       (w) => !reservations.some((r) => r.wallet_id === w.id)
     );
-    const walletId = unselectedWallet ? unselectedWallet.id : activeWallets[0]?.id || "";
+    const walletId = unselectedWallet ? unselectedWallet.id : wallets[0]?.id || "";
     setReservations((prev) => [
       ...prev,
-      {
-        wallet_id: walletId,
-        reserved_amount: 0,
-        allocation_method: "manual",
-      },
+      { wallet_id: walletId, reserved_amount: 0, allocation_method: "manual" },
     ]);
   };
 
@@ -106,39 +122,65 @@ function GoalFormDialogContent({
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !targetAmount) return;
 
     const targetVal = parseFloat(targetAmount) || 0;
-    const formattedReservations = reservations.map((r) => ({
-      wallet_id: r.wallet_id,
-      reserved_amount: r.reserved_amount || 0,
-      allocation_method: r.allocation_method,
-      allocation_config: r.allocation_method === "percentage" ? { percentage: r.percentage || 0 } : undefined,
-    }));
+    setIsSubmitting(true);
 
-    if (goalToEdit) {
-      store.updateGoal(goalToEdit.id, {
-        name: name.trim(),
-        target_amount: targetVal,
-        target_date: targetDate || undefined,
-        status,
-        notes,
-        reservations: formattedReservations,
-      });
-    } else {
-      store.addGoal({
-        name: name.trim(),
-        target_amount: targetVal,
-        target_date: targetDate || undefined,
-        notes,
-        ownerType,
-        reservations: formattedReservations,
-      });
+    try {
+      let goalId: string;
+
+      if (goalToEdit) {
+        await goalsService.updateGoal(goalToEdit.id, {
+          name: name.trim(),
+          target_amount: targetVal,
+          target_date: targetDate || undefined,
+          status,
+        });
+        goalId = goalToEdit.id;
+
+        await Promise.all(
+          existingReservationIds.map((id) => reservationsService.deleteReservation(id))
+        );
+      } else {
+        const created = await goalsService.createGoal({
+          owner_type: ownerType,
+          name: name.trim(),
+          target_amount: targetVal,
+          target_date: targetDate || undefined,
+        });
+        goalId = created.id;
+      }
+
+      await Promise.all(
+        reservations
+          .filter((r) => r.reserved_amount > 0)
+          .map((r) =>
+            reservationsService.createReservation({
+              wallet_id: r.wallet_id,
+              goal_id: goalId,
+              reserved_amount: r.reserved_amount,
+              allocation_method: r.allocation_method,
+              allocation_config:
+                r.allocation_method === "percentage" ? { percentage: r.percentage || 0 } : undefined,
+            })
+          )
+      );
+
+      toast.success(goalToEdit ? "Goal berhasil diperbarui!" : "Goal berhasil dibuat!");
+      onSaved?.();
+      onClose();
+    } catch (err) {
+      const description =
+        err && typeof err === "object" && "response" in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      toast.error("Gagal menyimpan goal", { description });
+    } finally {
+      setIsSubmitting(false);
     }
-
-    onClose();
   };
 
   const totalReservedInForm = reservations.reduce((sum, r) => sum + (r.reserved_amount || 0), 0);
@@ -192,59 +234,53 @@ function GoalFormDialogContent({
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="goal-status">Status Goal</Label>
-            <Select value={status} onValueChange={(val) => setStatus(val as GoalStatus)}>
-              <SelectTrigger id="goal-status">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Aktif Berjalan</SelectItem>
-                <SelectItem value="completed">Tercapai / Selesai</SelectItem>
-                <SelectItem value="cancelled">Dibatalkan</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        {/* Catatan */}
-        <div className="space-y-2">
-          <Label htmlFor="goal-notes">Catatan & Deskripsi</Label>
-          <Textarea
-            id="goal-notes"
-            placeholder="Catatan mengenai tujuan finansial ini..."
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            className="h-20"
-          />
+          {goalToEdit && (
+            <div className="space-y-2">
+              <Label htmlFor="goal-status">Status Goal</Label>
+              <Select value={status} onValueChange={(val) => setStatus(val as GoalStatus)}>
+                <SelectTrigger id="goal-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Aktif Berjalan</SelectItem>
+                  <SelectItem value="completed">Tercapai / Selesai</SelectItem>
+                  <SelectItem value="cancelled">Dibatalkan</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         {/* Owner Type */}
-        <div className="space-y-2">
-          <Label>Kepemilikan Goal</Label>
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 cursor-pointer text-sm">
-              <input
-                type="radio"
-                name="goal-owner"
-                checked={ownerType === "household"}
-                onChange={() => setOwnerType("household")}
-                className="accent-primary"
-              />
-              <span>Household (Gabungan Keluarga)</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer text-sm">
-              <input
-                type="radio"
-                name="goal-owner"
-                checked={ownerType === "user"}
-                onChange={() => setOwnerType("user")}
-                className="accent-primary"
-              />
-              <span>Pribadi ({store.getActiveUser().name})</span>
-            </label>
+        {!goalToEdit && (
+          <div className="space-y-2">
+            <Label>Kepemilikan Goal</Label>
+            <div className="flex items-center gap-4">
+              {isAdmin && (
+                <label className="flex items-center gap-2 cursor-pointer text-sm">
+                  <input
+                    type="radio"
+                    name="goal-owner"
+                    checked={ownerType === "household"}
+                    onChange={() => setOwnerType("household")}
+                    className="accent-primary"
+                  />
+                  <span>Household (Gabungan Keluarga)</span>
+                </label>
+              )}
+              <label className="flex items-center gap-2 cursor-pointer text-sm">
+                <input
+                  type="radio"
+                  name="goal-owner"
+                  checked={ownerType === "user"}
+                  onChange={() => setOwnerType("user")}
+                  className="accent-primary"
+                />
+                <span>Pribadi</span>
+              </label>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Sub-Section Reservasi Dompet */}
         <div className="space-y-3 pt-2 border-t border-border">
@@ -261,6 +297,7 @@ function GoalFormDialogContent({
               size="xs"
               onClick={handleAddReservationRow}
               className="gap-1 text-xs"
+              disabled={isLoadingData}
             >
               <PlusIcon className="w-3.5 h-3.5" />
               Tambah Dompet
@@ -268,7 +305,7 @@ function GoalFormDialogContent({
           </div>
 
           {reservations.map((res, index) => {
-            const walletBreakdown = store.getWalletBalanceBreakdown(res.wallet_id);
+            const wallet = wallets.find((w) => w.id === res.wallet_id);
             return (
               <div
                 key={index}
@@ -285,7 +322,7 @@ function GoalFormDialogContent({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {activeWallets.map((w) => (
+                        {wallets.map((w) => (
                           <SelectItem key={w.id} value={w.id}>
                             {w.name}
                           </SelectItem>
@@ -338,10 +375,9 @@ function GoalFormDialogContent({
                   </div>
                 </div>
 
-                {walletBreakdown.wallet && (
+                {wallet && (
                   <div className="text-[11px] text-muted-foreground font-mono flex items-center justify-between px-1">
-                    <span>Saldo Total: {formatRupiah(walletBreakdown.totalBalance)}</span>
-                    <span>Saldo Bebas Sekarang: {formatRupiah(walletBreakdown.freeBalance)}</span>
+                    <span>Saldo Wallet: {formatRupiah(wallet.balance)}</span>
                   </div>
                 )}
               </div>
@@ -361,7 +397,7 @@ function GoalFormDialogContent({
         <Button type="button" variant="outline" onClick={onClose}>
           Batal
         </Button>
-        <Button type="submit" className="bg-primary text-primary-foreground font-medium">
+        <Button type="submit" disabled={isSubmitting || isLoadingData} className="bg-primary text-primary-foreground font-medium">
           {goalToEdit ? "Simpan Perubahan" : "Buat Financial Goal"}
         </Button>
       </DialogFooter>
@@ -373,6 +409,7 @@ export function GoalFormDialog({
   open,
   onOpenChange,
   goalToEdit,
+  onSaved,
 }: GoalFormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -382,6 +419,7 @@ export function GoalFormDialog({
             key={goalToEdit ? goalToEdit.id : "new-goal"}
             goalToEdit={goalToEdit}
             onClose={() => onOpenChange(false)}
+            onSaved={onSaved}
           />
         )}
       </DialogContent>
