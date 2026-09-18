@@ -9,13 +9,16 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { router } from "@/router"
 import { queryClient } from "@/configs/query"
 import { Toaster } from "sonner"
+import { AuthProvider } from "@/contexts/auth-context"
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <RouterProvider router={router} />
+          <AuthProvider>
+            <RouterProvider router={router} />
+          </AuthProvider>
           <Toaster />
         </TooltipProvider>
       </QueryClientProvider>
