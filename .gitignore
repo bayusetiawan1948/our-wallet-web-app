@@ -1,3 +1,13 @@
+# Compiled / Build output
+/dist
+/build
+*.tsbuildinfo
+
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+
 # Logs
 logs
 *.log
@@ -7,22 +17,66 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# OS Files
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
 
-#other
-*.reference
-*.agents
+# Tests & Coverage
+/coverage
+/.nyc_output
+*.lcov
+
+# Environment Variables
+.env
+.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+!.env.example
+!.env.template
+
+# IDEs and Editors
+/.idea
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Temp & Runtime data
+.temp
+.tmp
+pids
+*.pid
+*.seed
+*.pid.lock
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Database & Local storage
+*.sqlite
+*.sqlite3
+*.db
+
+# Secrets & Certificates
+*.pem
+*.key
+*.cert
+*.crt
