@@ -482,10 +482,10 @@ export default function TransactionsPage() {
                     )}
 
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="grid gap-1.5">
+                      <div className="grid min-w-0 gap-1.5">
                         <Label className="text-xs font-medium">Pilih Wallet</Label>
                         <Select value={txWalletId} onValueChange={setTxWalletId}>
-                          <SelectTrigger className="h-9">
+                          <SelectTrigger className="h-9 w-full">
                             <SelectValue placeholder="Pilih wallet" />
                           </SelectTrigger>
                           <SelectContent>
@@ -498,10 +498,10 @@ export default function TransactionsPage() {
                         </Select>
                       </div>
 
-                      <div className="grid gap-1.5">
+                      <div className="grid min-w-0 gap-1.5">
                         <Label className="text-xs font-medium">Kategori</Label>
                         <Select value={txCategoryId} onValueChange={setTxCategoryId}>
-                          <SelectTrigger className="h-9">
+                          <SelectTrigger className="h-9 w-full">
                             <SelectValue placeholder="Pilih kategori" />
                           </SelectTrigger>
                           <SelectContent>
@@ -516,7 +516,7 @@ export default function TransactionsPage() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="grid gap-1.5">
+                      <div className="grid min-w-0 gap-1.5">
                         <Label className="text-xs font-medium">Jumlah Nominal</Label>
                         <CurrencyInput
                           placeholder="0"
@@ -527,7 +527,7 @@ export default function TransactionsPage() {
                         />
                       </div>
 
-                      <div className="grid gap-1.5">
+                      <div className="grid min-w-0 gap-1.5">
                         <Label className="text-xs font-medium">Tanggal</Label>
                         <Input
                           type="date"
@@ -539,7 +539,7 @@ export default function TransactionsPage() {
                       </div>
                     </div>
 
-                    <div className="grid gap-1.5">
+                    <div className="grid min-w-0 gap-1.5">
                       <Label className="text-xs font-medium">Catatan / Keterangan</Label>
                       <Input
                         placeholder="Makan siang bersama tim / Belanja bulanan..."
@@ -562,10 +562,10 @@ export default function TransactionsPage() {
                   /* Form Transfer Dana */
                   <form onSubmit={handleCreateTransfer} className="space-y-4 pt-4">
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="grid gap-1.5">
+                      <div className="grid min-w-0 gap-1.5">
                         <Label className="text-xs font-medium">Wallet Asal (Sumber)</Label>
                         <Select value={trFromWalletId} onValueChange={setTrFromWalletId}>
-                          <SelectTrigger className="h-9">
+                          <SelectTrigger className="h-9 w-full">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -578,10 +578,10 @@ export default function TransactionsPage() {
                         </Select>
                       </div>
 
-                      <div className="grid gap-1.5">
+                      <div className="grid min-w-0 gap-1.5">
                         <Label className="text-xs font-medium">Wallet Tujuan</Label>
                         <Select value={trToWalletId} onValueChange={setTrToWalletId}>
-                          <SelectTrigger className="h-9">
+                          <SelectTrigger className="h-9 w-full">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -596,7 +596,7 @@ export default function TransactionsPage() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="grid gap-1.5">
+                      <div className="grid min-w-0 gap-1.5">
                         <Label className="text-xs font-medium">Jumlah Nominal</Label>
                         <CurrencyInput
                           placeholder="0"
@@ -607,7 +607,7 @@ export default function TransactionsPage() {
                         />
                       </div>
 
-                      <div className="grid gap-1.5">
+                      <div className="grid min-w-0 gap-1.5">
                         <Label className="text-xs font-medium">Biaya Transfer</Label>
                         <CurrencyInput
                           placeholder="0"
@@ -618,7 +618,7 @@ export default function TransactionsPage() {
                       </div>
                     </div>
 
-                    <div className="grid gap-1.5">
+                    <div className="grid min-w-0 gap-1.5">
                       <Label className="text-xs font-medium">Tanggal</Label>
                       <Input
                         type="date"

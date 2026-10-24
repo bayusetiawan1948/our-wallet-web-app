@@ -59,7 +59,9 @@ function BudgetFormDialogContent({
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const expenseCategories = categories.filter((c) => c.type === "expense" || c.type === "both");
+  const expenseCategories = categories.filter(
+    (c) => c.is_active && (c.type === "expense" || c.type === "both")
+  );
 
   const [name, setName] = useState(() => budgetToEdit?.name || "");
   const [categoryId, setCategoryId] = useState(() => budgetToEdit?.category_id || "");
@@ -81,7 +83,9 @@ function BudgetFormDialogContent({
         setCategories(categoryList);
 
         if (!categoryId && categoryList.length > 0) {
-          const firstExpense = categoryList.find((c) => c.type === "expense" || c.type === "both");
+          const firstExpense = categoryList.find(
+            (c) => c.is_active && (c.type === "expense" || c.type === "both")
+          );
           setCategoryId(firstExpense?.id || "");
         }
 
@@ -210,7 +214,7 @@ function BudgetFormDialogContent({
         </DialogDescription>
       </DialogHeader>
 
-      <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-1">
+      <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto overflow-x-hidden pr-1">
         {/* Nama & Kategori */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
@@ -231,11 +235,17 @@ function BudgetFormDialogContent({
                 <SelectValue placeholder="Pilih Kategori" />
               </SelectTrigger>
               <SelectContent>
-                {expenseCategories.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
+                {expenseCategories.length === 0 ? (
+                  <div className="px-2 py-3 text-xs text-muted-foreground">
+                    Belum ada kategori pengeluaran. Buat dulu di menu Kategori.
+                  </div>
+                ) : (
+                  expenseCategories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -302,7 +312,7 @@ function BudgetFormDialogContent({
 
         {/* Sub-Section Reservasi Dompet */}
         <div className="space-y-3 pt-2 border-t border-border">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <div>
               <Label className="text-sm font-semibold">Reservasi Dompet Penampung</Label>
               <p className="text-xs text-muted-foreground">
@@ -327,16 +337,16 @@ function BudgetFormDialogContent({
             return (
               <div
                 key={index}
-                className="p-3 rounded-lg border border-border bg-muted/20 space-y-3"
+                className="p-3 rounded-lg border border-border bg-muted/20 space-y-3 min-w-0"
               >
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
-                  <div className="sm:col-span-4 space-y-1">
+                  <div className="sm:col-span-4 space-y-1 min-w-0">
                     <Label className="text-xs text-muted-foreground">Dompet</Label>
                     <Select
                       value={res.wallet_id}
                       onValueChange={(val) => handleReservationChange(index, "wallet_id", val)}
                     >
-                      <SelectTrigger className="h-9 text-xs">
+                      <SelectTrigger className="h-9 text-xs w-full min-w-0">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -349,7 +359,7 @@ function BudgetFormDialogContent({
                     </Select>
                   </div>
 
-                  <div className="sm:col-span-3 space-y-1">
+                  <div className="sm:col-span-3 space-y-1 min-w-0">
                     <Label className="text-xs text-muted-foreground">Metode Pengisian</Label>
                     <Select
                       value={res.allocation_method}
@@ -357,7 +367,7 @@ function BudgetFormDialogContent({
                         handleReservationChange(index, "allocation_method", val as AllocationMethod)
                       }
                     >
-                      <SelectTrigger className="h-9 text-xs">
+                      <SelectTrigger className="h-9 text-xs w-full min-w-0">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -368,7 +378,7 @@ function BudgetFormDialogContent({
                     </Select>
                   </div>
 
-                  <div className="sm:col-span-4 space-y-1">
+                  <div className="sm:col-span-4 space-y-1 min-w-0">
                     <Label className="text-xs text-muted-foreground">Nominal Reservasi</Label>
                     <CurrencyInput
                       value={res.reserved_amount || ""}
@@ -376,11 +386,11 @@ function BudgetFormDialogContent({
                         handleReservationChange(index, "reserved_amount", num)
                       }
                       placeholder="0"
-                      className="h-9 text-xs"
+                      className="h-9 text-xs w-full"
                     />
                   </div>
 
-                  <div className="sm:col-span-1 flex justify-end pt-5 sm:pt-0">
+                  <div className="sm:col-span-1 flex justify-end pt-5 sm:pt-0 min-w-0">
                     <Button
                       type="button"
                       variant="ghost"

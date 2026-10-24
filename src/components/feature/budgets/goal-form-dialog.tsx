@@ -196,7 +196,7 @@ function GoalFormDialogContent({
         </DialogDescription>
       </DialogHeader>
 
-      <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-1">
+      <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto overflow-x-hidden pr-1">
         {/* Nama & Target Nominal */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
@@ -284,7 +284,7 @@ function GoalFormDialogContent({
 
         {/* Sub-Section Reservasi Dompet */}
         <div className="space-y-3 pt-2 border-t border-border">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <div>
               <Label className="text-sm font-semibold">Reservasi Dompet Penampung</Label>
               <p className="text-xs text-muted-foreground">
@@ -309,16 +309,16 @@ function GoalFormDialogContent({
             return (
               <div
                 key={index}
-                className="p-3 rounded-lg border border-border bg-muted/20 space-y-3"
+                className="p-3 rounded-lg border border-border bg-muted/20 space-y-3 min-w-0"
               >
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
-                  <div className="sm:col-span-4 space-y-1">
+                  <div className="sm:col-span-4 space-y-1 min-w-0">
                     <Label className="text-xs text-muted-foreground">Dompet</Label>
                     <Select
                       value={res.wallet_id}
                       onValueChange={(val) => handleReservationChange(index, "wallet_id", val)}
                     >
-                      <SelectTrigger className="h-9 text-xs">
+                      <SelectTrigger className="h-9 text-xs w-full min-w-0">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -331,7 +331,7 @@ function GoalFormDialogContent({
                     </Select>
                   </div>
 
-                  <div className="sm:col-span-3 space-y-1">
+                  <div className="sm:col-span-3 space-y-1 min-w-0">
                     <Label className="text-xs text-muted-foreground">Metode Pengisian</Label>
                     <Select
                       value={res.allocation_method}
@@ -339,7 +339,7 @@ function GoalFormDialogContent({
                         handleReservationChange(index, "allocation_method", val as AllocationMethod)
                       }
                     >
-                      <SelectTrigger className="h-9 text-xs">
+                      <SelectTrigger className="h-9 text-xs w-full min-w-0">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -350,7 +350,7 @@ function GoalFormDialogContent({
                     </Select>
                   </div>
 
-                  <div className="sm:col-span-4 space-y-1">
+                  <div className="sm:col-span-4 space-y-1 min-w-0">
                     <Label className="text-xs text-muted-foreground">Nominal Reservasi</Label>
                     <CurrencyInput
                       value={res.reserved_amount || ""}
@@ -358,11 +358,11 @@ function GoalFormDialogContent({
                         handleReservationChange(index, "reserved_amount", num)
                       }
                       placeholder="0"
-                      className="h-9 text-xs"
+                      className="h-9 text-xs w-full"
                     />
                   </div>
 
-                  <div className="sm:col-span-1 flex justify-end pt-5 sm:pt-0">
+                  <div className="sm:col-span-1 flex justify-end pt-5 sm:pt-0 min-w-0">
                     <Button
                       type="button"
                       variant="ghost"

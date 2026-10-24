@@ -329,7 +329,7 @@ export default function WalletsPage() {
                     <div className="grid gap-2">
                       <Label htmlFor="type">Jenis / Tipe Dompet</Label>
                       <Select value={newType} onValueChange={(val) => setNewType(val as WalletType)}>
-                        <SelectTrigger id="type">
+                        <SelectTrigger id="type" className="w-full">
                           <SelectValue placeholder="Pilih tipe dompet" />
                         </SelectTrigger>
                         <SelectContent>
@@ -346,7 +346,7 @@ export default function WalletsPage() {
                         value={newOwnerType}
                         onValueChange={(val) => setNewOwnerType(val as "user" | "household")}
                       >
-                        <SelectTrigger id="ownerType">
+                        <SelectTrigger id="ownerType" className="w-full">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -360,7 +360,7 @@ export default function WalletsPage() {
                       <div className="grid gap-2">
                         <Label htmlFor="ownerUser">Pemilik Dompet</Label>
                         <Select value={newOwnerUserId} onValueChange={setNewOwnerUserId}>
-                          <SelectTrigger id="ownerUser">
+                          <SelectTrigger id="ownerUser" className="w-full">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -546,7 +546,7 @@ export default function WalletsPage() {
                             <div className="grid gap-2">
                               <Label htmlFor="editType">Jenis / Tipe Dompet</Label>
                               <Select value={editType} onValueChange={(val) => setEditType(val as WalletType)}>
-                                <SelectTrigger id="editType">
+                                <SelectTrigger id="editType" className="w-full">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -564,7 +564,7 @@ export default function WalletsPage() {
                                   value={editOwnerType}
                                   onValueChange={(val) => setEditOwnerType(val as "user" | "household")}
                                 >
-                                  <SelectTrigger id="editOwnerType">
+                                  <SelectTrigger id="editOwnerType" className="w-full">
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>

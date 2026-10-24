@@ -612,7 +612,9 @@ export default function InvestmentPage() {
                             />
                           </div>
                           <div className="grid gap-2">
-                            <Label className="text-xs font-semibold">Harga Beli Rata-rata</Label>
+                            <Label className="text-xs font-semibold">
+                              Harga Beli per {newInvUnit || "unit"}
+                            </Label>
                             <CurrencyInput
                               value={newInvOpeningPrice}
                               onValueChange={(num) => setNewInvOpeningPrice(num.toString())}
@@ -620,6 +622,17 @@ export default function InvestmentPage() {
                             />
                           </div>
                         </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          Isi harga <span className="font-semibold">per {newInvUnit || "unit"}</span>, bukan total pembelian.
+                          {(parseFloat(newInvOpeningQty) || 0) > 0 && (parseFloat(newInvOpeningPrice) || 0) > 0 && (
+                            <>
+                              {" "}Total modal:{" "}
+                              <span className="font-semibold text-foreground">
+                                {formatRupiah((parseFloat(newInvOpeningQty) || 0) * (parseFloat(newInvOpeningPrice) || 0))}
+                              </span>
+                            </>
+                          )}
+                        </p>
                         <div className="grid gap-2">
                           <Label htmlFor="inv-opening-date" className="text-xs font-semibold">Tanggal Perolehan</Label>
                           <Input
@@ -941,6 +954,17 @@ export default function InvestmentPage() {
                               />
                             </div>
                           </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            Isi harga <span className="font-semibold">per {inv.unit}</span>, bukan total.
+                            {(parseFloat(invTxQty) || 0) > 0 && (parseFloat(invTxPrice) || 0) > 0 && (
+                              <>
+                                {" "}Total:{" "}
+                                <span className="font-semibold text-foreground">
+                                  {formatRupiah((parseFloat(invTxQty) || 0) * (parseFloat(invTxPrice) || 0))}
+                                </span>
+                              </>
+                            )}
+                          </p>
 
                           <div className="grid gap-2">
                             <Label className="text-xs font-semibold">Tanggal Transaksi</Label>
@@ -1213,8 +1237,7 @@ export default function InvestmentPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Hapus Aset Investasi</AlertDialogTitle>
             <AlertDialogDescription>
-              Hapus aset &quot;{deletingInv?.asset_name}&quot;? Jika masih ada transaksi aktif, penghapusan akan ditolak.
-              Void dulu semua transaksinya lewat tabel riwayat di bawah.
+              Hapus aset &quot;{deletingInv?.asset_name}&quot;? Jika masih ada transaksi aktif (termasuk Kepemilikan Awal), void dulu transaksinya di tabel riwayat, baru aset bisa dihapus.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
