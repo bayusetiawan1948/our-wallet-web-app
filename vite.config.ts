@@ -5,6 +5,10 @@ import { defineConfig } from "vite"
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: {
+    // Izinkan akses lewat hostname Tailscale (tailscale serve)
+    allowedHosts: [".ts.net"],
+  },
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

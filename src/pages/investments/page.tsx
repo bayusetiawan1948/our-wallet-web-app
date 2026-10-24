@@ -23,11 +23,29 @@ import {
   ScalesIcon,
   WalletIcon,
   TagIcon,
+  TrashIcon,
+  ProhibitIcon,
 } from "@phosphor-icons/react";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { formatRupiah } from "@/libs/number";
 import { Button } from "@/components/ui/button";
-import { type AssetType, type InvestmentTransaction, type Wallet } from "@/types";
+import {
+  type AssetType,
+  type InvestmentTransaction,
+  type InvestmentTransactionType,
+  type Wallet,
+} from "@/types";
+import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -103,6 +121,20 @@ export default function InvestmentPage() {
   const [newInvUnit, setNewInvUnit] = useState("lot");
   const [newInvInitialPrice, setNewInvInitialPrice] = useState("");
   const [newInvOwnerType, setNewInvOwnerType] = useState<"household" | "user">("household");
+  // Aset yang sudah dimiliki sebelum dicatat (tidak memotong wallet)
+  const [newInvHasExisting, setNewInvHasExisting] = useState(false);
+  const [newInvOpeningQty, setNewInvOpeningQty] = useState("");
+  const [newInvOpeningPrice, setNewInvOpeningPrice] = useState("");
+  const [newInvOpeningDate, setNewInvOpeningDate] = useState(new Date().toISOString().split("T")[0]);
+
+  // Edit / Delete / Void State
+  const [editingInv, setEditingInv] = useState<InvestmentWithValuation | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editType, setEditType] = useState<AssetType>("saham");
+  const [editUnit, setEditUnit] = useState("");
+  const [editOwnerType, setEditOwnerType] = useState<"household" | "user">("household");
+  const [deletingInv, setDeletingInv] = useState<InvestmentWithValuation | null>(null);
+  const [voidingTx, setVoidingTx] = useState<InvestmentTransaction | null>(null);
 
   // Valuation Modal State
   const [selectedInvForVal, setSelectedInvForVal] = useState<string | null>(null);
@@ -110,15 +142,27 @@ export default function InvestmentPage() {
 
   // Buy/Sell Modal State
   const [selectedInvForTx, setSelectedInvForTx] = useState<string | null>(null);
-  const [invTxType, setInvTxType] = useState<"buy" | "sell">("buy");
+  const [invTxType, setInvTxType] = useState<InvestmentTransactionType>("buy");
   const [invTxWalletId, setInvTxWalletId] = useState<string>(accessibleWallets[0]?.id || "");
   const [invTxQty, setInvTxQty] = useState<string>("");
   const [invTxPrice, setInvTxPrice] = useState<string>("");
   const [invTxDate, setInvTxDate] = useState<string>(new Date().toISOString().split("T")[0]);
 
+  const apiErrorMessage = (err: unknown): string | undefined =>
+    err && typeof err === "object" && "response" in err
+      ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+      : undefined;
+
   const handleCreateInvestment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newInvName.trim()) return;
+
+    const openingQty = newInvHasExisting ? parseFloat(newInvOpeningQty) || 0 : 0;
+
+    if (newInvHasExisting && openingQty <= 0) {
+      toast.error("Jumlah unit yang sudah dimiliki harus lebih dari nol.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -128,11 +172,21 @@ export default function InvestmentPage() {
         asset_type: newInvType,
         unit: newInvUnit,
         initial_price: parseFloat(newInvInitialPrice) || 0,
+        ...(newInvHasExisting
+          ? {
+              opening_quantity: openingQty,
+              opening_price: parseFloat(newInvOpeningPrice) || 0,
+              opening_date: newInvOpeningDate,
+            }
+          : {}),
       });
       toast.success(`Aset investasi "${newInvName}" berhasil dibuat!`);
       setNewInvName("");
       setNewInvUnit("lot");
       setNewInvInitialPrice("");
+      setNewInvHasExisting(false);
+      setNewInvOpeningQty("");
+      setNewInvOpeningPrice("");
       setIsAddInvOpen(false);
       loadData();
     } catch (err) {
@@ -162,7 +216,10 @@ export default function InvestmentPage() {
 
   const handleCreateInvTx = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedInvForTx || !invTxWalletId || !invTxQty || !invTxPrice) return;
+    const isOpening = invTxType === "opening";
+
+    if (!selectedInvForTx || !invTxQty) return;
+    if (isOpening ? invTxPrice === "" : !invTxWalletId || !invTxPrice) return;
 
     const qty = parseFloat(invTxQty) || 0;
     const price = parseFloat(invTxPrice) || 0;
@@ -170,7 +227,7 @@ export default function InvestmentPage() {
     setIsSubmitting(true);
     try {
       await investmentsService.addTransaction(selectedInvForTx, {
-        wallet_id: invTxWalletId,
+        wallet_id: isOpening ? undefined : invTxWalletId,
         type: invTxType,
         quantity: qty,
         price,
@@ -189,6 +246,69 @@ export default function InvestmentPage() {
       toast.error("Gagal mencatat transaksi investasi", { description });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const canManageInv = (inv: InvestmentWithValuation) => isAdmin || inv.owner_user_id === user?.id;
+
+  const openEditInv = (inv: InvestmentWithValuation) => {
+    setEditingInv(inv);
+    setEditName(inv.asset_name);
+    setEditType(inv.asset_type);
+    setEditUnit(inv.unit);
+    setEditOwnerType(inv.owner_user_id ? "user" : "household");
+  };
+
+  const handleUpdateInvestment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingInv || !editName.trim() || !editUnit.trim()) return;
+
+    const currentOwnerType = editingInv.owner_user_id ? "user" : "household";
+
+    setIsSubmitting(true);
+    try {
+      await investmentsService.updateInvestment(editingInv.id, {
+        asset_name: editName.trim(),
+        asset_type: editType,
+        unit: editUnit.trim(),
+        // Kepemilikan hanya dikirim bila diubah (hanya admin yang boleh)
+        ...(isAdmin && editOwnerType !== currentOwnerType ? { owner_type: editOwnerType } : {}),
+      });
+      toast.success("Aset investasi berhasil diperbarui!");
+      setEditingInv(null);
+      loadData();
+    } catch (err) {
+      toast.error("Gagal memperbarui aset investasi", { description: apiErrorMessage(err) });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmDeleteInv = async () => {
+    if (!deletingInv) return;
+
+    try {
+      await investmentsService.deleteInvestment(deletingInv.id);
+      toast.success(`Aset "${deletingInv.asset_name}" berhasil dihapus.`);
+      setDeletingInv(null);
+      loadData();
+    } catch (err) {
+      toast.error("Gagal menghapus aset investasi", { description: apiErrorMessage(err) });
+      setDeletingInv(null);
+    }
+  };
+
+  const handleConfirmVoidTx = async () => {
+    if (!voidingTx) return;
+
+    try {
+      await investmentsService.voidTransaction(voidingTx.investment_id, voidingTx.id);
+      toast.success("Transaksi investasi berhasil di-void.");
+      setVoidingTx(null);
+      loadData();
+    } catch (err) {
+      toast.error("Gagal me-void transaksi investasi", { description: apiErrorMessage(err) });
+      setVoidingTx(null);
     }
   };
 
@@ -238,7 +358,7 @@ export default function InvestmentPage() {
     let totalCost = 0;
 
     activeTxs.forEach((tx) => {
-      if (tx.type === "buy") {
+      if (tx.type !== "sell") {
         currentQty += tx.quantity;
         totalCost += tx.quantity * tx.price;
       } else {
@@ -276,7 +396,7 @@ export default function InvestmentPage() {
       let totalCost = 0;
 
       activeTxs.forEach((tx) => {
-        if (tx.type === "buy") {
+        if (tx.type !== "sell") {
           currentQty += tx.quantity;
           totalCost += tx.quantity * tx.price;
         } else {
@@ -456,6 +576,65 @@ export default function InvestmentPage() {
                     </p>
                   </div>
 
+                  <div className="grid gap-3 rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="space-y-0.5 min-w-0">
+                        <Label htmlFor="inv-existing" className="text-xs font-semibold">
+                          Sudah punya aset ini sebelumnya?
+                        </Label>
+                        <p className="text-[11px] text-muted-foreground">
+                          Catat kepemilikan awal tanpa memotong saldo wallet.
+                        </p>
+                      </div>
+                      <Switch
+                        id="inv-existing"
+                        checked={newInvHasExisting}
+                        onCheckedChange={setNewInvHasExisting}
+                      />
+                    </div>
+
+                    {newInvHasExisting && (
+                      <div className="grid gap-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="grid gap-2">
+                            <Label htmlFor="inv-opening-qty" className="text-xs font-semibold">
+                              Jumlah Dimiliki ({newInvUnit || "unit"})
+                            </Label>
+                            <Input
+                              id="inv-opening-qty"
+                              type="number"
+                              step="any"
+                              placeholder="10"
+                              value={newInvOpeningQty}
+                              onChange={(e) => setNewInvOpeningQty(e.target.value)}
+                              required
+                              className="rounded-lg"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label className="text-xs font-semibold">Harga Beli Rata-rata</Label>
+                            <CurrencyInput
+                              value={newInvOpeningPrice}
+                              onValueChange={(num) => setNewInvOpeningPrice(num.toString())}
+                              placeholder="Rp 0"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="inv-opening-date" className="text-xs font-semibold">Tanggal Perolehan</Label>
+                          <Input
+                            id="inv-opening-date"
+                            type="date"
+                            value={newInvOpeningDate}
+                            onChange={(e) => setNewInvOpeningDate(e.target.value)}
+                            required
+                            className="rounded-lg"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="grid gap-2">
                     <Label htmlFor="inv-owner" className="text-xs font-semibold">Kepemilikan Aset</Label>
                     <Select value={newInvOwnerType} onValueChange={(v: "household" | "user") => setNewInvOwnerType(v)}>
@@ -539,9 +718,35 @@ export default function InvestmentPage() {
                       </CardDescription>
                     </div>
                   </div>
-                  <Badge variant="outline" className="text-[10px] font-mono uppercase bg-background px-2 py-0.5 shrink-0">
-                    {inv.unit}
-                  </Badge>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Badge variant="outline" className="text-[10px] font-mono uppercase bg-background px-2 py-0.5">
+                      {inv.unit}
+                    </Badge>
+                    {canManageInv(inv) && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 rounded-md text-muted-foreground hover:text-foreground"
+                          aria-label={`Edit ${inv.asset_name}`}
+                          onClick={() => openEditInv(inv)}
+                        >
+                          <PencilSimpleIcon className="size-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 rounded-md text-muted-foreground hover:text-rose-600"
+                          aria-label={`Hapus ${inv.asset_name}`}
+                          onClick={() => setDeletingInv(inv)}
+                        >
+                          <TrashIcon className="size-3.5" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
 
@@ -664,35 +869,51 @@ export default function InvestmentPage() {
                         </DialogHeader>
 
                         <div className="grid gap-4 py-4">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                              <Label className="text-xs font-semibold">Tipe Transaksi</Label>
-                              <Select value={invTxType} onValueChange={(val: "buy" | "sell") => setInvTxType(val)}>
-                                <SelectTrigger className="rounded-lg">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent className="rounded-xl">
-                                  <SelectItem value="buy">🟢 Beli (Potong Wallet)</SelectItem>
-                                  <SelectItem value="sell">🔴 Jual (Tambah Wallet)</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
+                          <div className="grid gap-2 min-w-0">
+                            <Label className="text-xs font-semibold">Tipe Transaksi</Label>
+                            <Select value={invTxType} onValueChange={(val: InvestmentTransactionType) => setInvTxType(val)}>
+                              <SelectTrigger className="w-full rounded-lg">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="rounded-xl" position="popper">
+                                <SelectItem value="buy">🟢 Beli (Potong Wallet)</SelectItem>
+                                <SelectItem value="sell">🔴 Jual (Tambah Wallet)</SelectItem>
+                                <SelectItem value="opening">📦 Kepemilikan Awal (Tanpa Wallet)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {invTxType === "opening" && (
+                              <p className="text-[11px] text-muted-foreground">
+                                Untuk aset yang sudah dimiliki sebelum dicatat. Saldo wallet tidak berubah.
+                              </p>
+                            )}
+                          </div>
 
-                            <div className="grid gap-2">
-                              <Label className="text-xs font-semibold">Wallet Terkait</Label>
-                              <Select value={invTxWalletId} onValueChange={setInvTxWalletId}>
-                                <SelectTrigger className="rounded-lg">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent className="rounded-xl">
-                                  {accessibleWallets.map((w) => (
-                                    <SelectItem key={w.id} value={w.id}>
-                                      {w.name} (Saldo: {formatRupiah(w.balance)})
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
+                          <div className={`grid gap-2 min-w-0 ${invTxType === "opening" ? "hidden" : ""}`}>
+                            <Label className="text-xs font-semibold">Wallet Terkait</Label>
+                            <Select value={invTxWalletId} onValueChange={setInvTxWalletId}>
+                              <SelectTrigger className="w-full min-w-0 rounded-lg">
+                                <SelectValue placeholder="Pilih wallet">
+                                  <span className="truncate">
+                                    {accessibleWallets.find((w) => w.id === invTxWalletId)?.name}
+                                  </span>
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent
+                                className="max-w-(--radix-select-trigger-width) rounded-xl"
+                                position="popper"
+                              >
+                                {accessibleWallets.map((w) => (
+                                  <SelectItem key={w.id} value={w.id}>
+                                    <span className="flex min-w-0 flex-col items-start pr-5">
+                                      <span className="w-full truncate">{w.name}</span>
+                                      <span className="text-[11px] text-muted-foreground">
+                                        Saldo: {formatRupiah(w.balance)}
+                                      </span>
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
 
                           <div className="grid grid-cols-2 gap-4">
@@ -710,7 +931,9 @@ export default function InvestmentPage() {
                             </div>
 
                             <div className="grid gap-2">
-                              <Label className="text-xs font-semibold">Harga per {inv.unit}</Label>
+                              <Label className="text-xs font-semibold">
+                                {invTxType === "opening" ? `Harga Beli Rata-rata per ${inv.unit}` : `Harga per ${inv.unit}`}
+                              </Label>
                               <CurrencyInput
                                 value={invTxPrice}
                                 onValueChange={(num) => setInvTxPrice(num.toString())}
@@ -786,7 +1009,7 @@ export default function InvestmentPage() {
           {hasError ? (
             <ErrorState onRetry={loadData} />
           ) : isLoading ? (
-            <DataTableSkeleton rows={5} cols={7} />
+            <DataTableSkeleton rows={5} cols={8} />
           ) : (
             <div className="overflow-x-auto rounded-xl border border-border/60">
               <Table>
@@ -799,12 +1022,13 @@ export default function InvestmentPage() {
                     <TableHead className="text-xs text-right whitespace-nowrap">Quantity</TableHead>
                     <TableHead className="text-xs text-right whitespace-nowrap">Harga Unit</TableHead>
                     <TableHead className="text-xs text-right whitespace-nowrap">Total Nominal</TableHead>
+                    <TableHead className="text-xs text-right whitespace-nowrap">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {itxControls.paginatedData.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="p-0">
+                      <TableCell colSpan={8} className="p-0">
                         <EmptyState
                           title="Belum Ada Transaksi Investasi"
                           description="Belum ada riwayat transaksi jual atau beli unit aset investasi."
@@ -820,7 +1044,10 @@ export default function InvestmentPage() {
                       const total = itx.quantity * itx.price;
 
                       return (
-                        <TableRow key={itx.id} className="hover:bg-muted/30 transition-colors">
+                        <TableRow
+                          key={itx.id}
+                          className={`hover:bg-muted/30 transition-colors ${itx.status === "void" ? "opacity-50" : ""}`}
+                        >
                           <TableCell className="font-mono text-xs font-medium text-foreground whitespace-nowrap">
                             {itx.date}
                           </TableCell>
@@ -828,21 +1055,30 @@ export default function InvestmentPage() {
                             {inv?.asset_name || "-"}
                           </TableCell>
                           <TableCell className="whitespace-nowrap">
-                            <Badge
-                              variant={itx.type === "buy" ? "default" : "secondary"}
-                              className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-md ${
-                                itx.type === "buy"
-                                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
-                                  : "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30"
-                              }`}
-                            >
-                              {itx.type === "buy" ? "BELI" : "JUAL"}
-                            </Badge>
+                            <div className="flex items-center gap-1.5">
+                              <Badge
+                                variant={itx.type === "sell" ? "secondary" : "default"}
+                                className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-md ${
+                                  itx.type === "sell"
+                                    ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30"
+                                    : itx.type === "opening"
+                                      ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30"
+                                      : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                                }`}
+                              >
+                                {itx.type === "buy" ? "BELI" : itx.type === "sell" ? "JUAL" : "KEPEMILIKAN AWAL"}
+                              </Badge>
+                              {itx.status === "void" && (
+                                <Badge variant="outline" className="text-[10px] uppercase px-1.5 py-0.5">
+                                  Void
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                             <div className="flex items-center gap-1.5">
                               <WalletIcon className="size-3.5 text-muted-foreground shrink-0" />
-                              <span>{wallet?.name || "-"}</span>
+                              <span>{itx.type === "opening" ? "— (tanpa wallet)" : wallet?.name || "-"}</span>
                             </div>
                           </TableCell>
                           <TableCell className="text-right font-mono text-xs font-medium whitespace-nowrap">
@@ -853,6 +1089,20 @@ export default function InvestmentPage() {
                           </TableCell>
                           <TableCell className="text-right font-bold font-mono text-xs text-foreground whitespace-nowrap">
                             {formatRupiah(total)}
+                          </TableCell>
+                          <TableCell className="text-right whitespace-nowrap">
+                            {itx.status === "active" && inv && canManageInv(inv) ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 gap-1 px-2 text-[11px] text-muted-foreground hover:text-rose-600"
+                                onClick={() => setVoidingTx(itx)}
+                              >
+                                <ProhibitIcon className="size-3.5" />
+                                Void
+                              </Button>
+                            ) : null}
                           </TableCell>
                         </TableRow>
                       );
@@ -872,6 +1122,128 @@ export default function InvestmentPage() {
           />
         </CardContent>
       </Card>
+
+      {/* Edit Investment Dialog */}
+      <Dialog open={!!editingInv} onOpenChange={(open) => !open && setEditingInv(null)}>
+        <DialogContent className="sm:max-w-[480px] rounded-2xl">
+          <form onSubmit={handleUpdateInvestment}>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-lg">
+                <PencilSimpleIcon className="size-5 text-primary" />
+                Edit Aset Investasi
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Ubah nama, kategori, satuan, atau kepemilikan. Jumlah unit diubah lewat transaksi (void lalu catat ulang).
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-inv-name" className="text-xs font-semibold">Nama Aset Investasi</Label>
+                <Input
+                  id="edit-inv-name"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  required
+                  className="rounded-lg"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-inv-type" className="text-xs font-semibold">Kategori Aset</Label>
+                  <Select value={editType} onValueChange={(v: AssetType) => setEditType(v)}>
+                    <SelectTrigger id="edit-inv-type" className="rounded-lg">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl">
+                      <SelectItem value="saham">📈 Saham</SelectItem>
+                      <SelectItem value="crypto">🪙 Crypto</SelectItem>
+                      <SelectItem value="emas">🥇 Emas / Logam Mulia</SelectItem>
+                      <SelectItem value="reksadana">🏦 Reksadana</SelectItem>
+                      <SelectItem value="obligasi">📄 Obligasi / SBN</SelectItem>
+                      <SelectItem value="perak">🥈 Perak</SelectItem>
+                      <SelectItem value="lainnya">✨ Lainnya</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-inv-unit" className="text-xs font-semibold">Satuan Unit</Label>
+                  <Input
+                    id="edit-inv-unit"
+                    placeholder="lot / gram / BTC / unit"
+                    value={editUnit}
+                    onChange={(e) => setEditUnit(e.target.value)}
+                    required
+                    className="rounded-lg"
+                  />
+                </div>
+              </div>
+
+              {isAdmin && (
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-inv-owner" className="text-xs font-semibold">Kepemilikan Aset</Label>
+                  <Select value={editOwnerType} onValueChange={(v: "household" | "user") => setEditOwnerType(v)}>
+                    <SelectTrigger id="edit-inv-owner" className="rounded-lg">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl">
+                      <SelectItem value="household">Keluarga (Household)</SelectItem>
+                      <SelectItem value="user">Personal (atas nama Anda)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditingInv(null)}>
+                Batal
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>Simpan Perubahan</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Investment Confirmation */}
+      <AlertDialog open={!!deletingInv} onOpenChange={(open) => !open && setDeletingInv(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Aset Investasi</AlertDialogTitle>
+            <AlertDialogDescription>
+              Hapus aset &quot;{deletingInv?.asset_name}&quot;? Jika masih ada transaksi aktif, penghapusan akan ditolak.
+              Void dulu semua transaksinya lewat tabel riwayat di bawah.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDeleteInv} className="bg-rose-600 hover:bg-rose-700">
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Void Transaction Confirmation */}
+      <AlertDialog open={!!voidingTx} onOpenChange={(open) => !open && setVoidingTx(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Void Transaksi Investasi</AlertDialogTitle>
+            <AlertDialogDescription>
+              Transaksi ini dibatalkan dan tidak lagi dihitung. Untuk transaksi beli atau jual, saldo wallet kembali
+              seperti sebelum transaksi. Riwayatnya tetap tersimpan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmVoidTx} className="bg-rose-600 hover:bg-rose-700">
+              Void Transaksi
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

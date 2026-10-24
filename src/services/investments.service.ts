@@ -1,5 +1,11 @@
 import { apiClient } from "@/lib/api-client";
-import type { AssetType, Investment, InvestmentTransaction, InvestmentValuation } from "@/types";
+import type {
+  AssetType,
+  Investment,
+  InvestmentTransaction,
+  InvestmentTransactionType,
+  InvestmentValuation,
+} from "@/types";
 
 interface InvestmentResponse {
   id: string;
@@ -20,8 +26,8 @@ export interface InvestmentWithValuation extends Investment {
 interface InvestmentTransactionResponse {
   id: string;
   investment_id: string;
-  wallet_id: string;
-  type: "buy" | "sell";
+  wallet_id: string | null;
+  type: InvestmentTransactionType;
   quantity: number;
   price: number;
   date: string;
@@ -85,9 +91,40 @@ export async function createInvestment(data: {
   asset_name: string;
   unit: string;
   initial_price?: number;
+  // Aset yang sudah dimiliki sebelum dicatat (tidak memotong wallet).
+  opening_quantity?: number;
+  opening_price?: number;
+  opening_date?: string;
 }): Promise<InvestmentWithValuation> {
   const res = await apiClient.post<{ data: InvestmentResponse }>("/investments", data);
   return toInvestment(res.data.data);
+}
+
+export async function updateInvestment(
+  investmentId: string,
+  data: {
+    asset_name?: string;
+    asset_type?: AssetType;
+    unit?: string;
+    owner_type?: "user" | "household";
+  }
+): Promise<InvestmentWithValuation> {
+  const res = await apiClient.patch<{ data: InvestmentResponse }>(`/investments/${investmentId}`, data);
+  return toInvestment(res.data.data);
+}
+
+export async function deleteInvestment(investmentId: string): Promise<void> {
+  await apiClient.delete(`/investments/${investmentId}`);
+}
+
+export async function voidTransaction(
+  investmentId: string,
+  transactionId: string
+): Promise<InvestmentTransaction> {
+  const res = await apiClient.post<{ data: InvestmentTransactionResponse }>(
+    `/investments/${investmentId}/transactions/${transactionId}/void`
+  );
+  return toTransaction(res.data.data);
 }
 
 export async function listTransactions(investmentId: string): Promise<InvestmentTransaction[]> {
@@ -99,7 +136,13 @@ export async function listTransactions(investmentId: string): Promise<Investment
 
 export async function addTransaction(
   investmentId: string,
-  data: { wallet_id: string; type: "buy" | "sell"; quantity: number; price: number; date: string }
+  data: {
+    wallet_id?: string;
+    type: InvestmentTransactionType;
+    quantity: number;
+    price: number;
+    date: string;
+  }
 ): Promise<InvestmentTransaction> {
   const res = await apiClient.post<{ data: InvestmentTransactionResponse }>(
     `/investments/${investmentId}/transactions`,

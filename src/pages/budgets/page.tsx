@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import * as budgetsService from "@/services/budgets.service";
 import * as goalsService from "@/services/goals.service";
@@ -83,12 +83,12 @@ export default function BudgetsPage() {
       const budgetResEntries = await Promise.all(
         budgetList.map(async (b) => [b.id, await budgetsService.listBudgetReservations(b.id)] as const)
       );
-      setBudgetReservations(Object.fromEntries(budgetResEntries));
+      setBudgetReservations(Object.fromEntries(budgetResEntries) as Record<string, Reservation[]>);
 
       const goalResEntries = await Promise.all(
         goalList.map(async (g) => [g.id, await goalsService.listGoalReservations(g.id)] as const)
       );
-      setGoalReservations(Object.fromEntries(goalResEntries));
+      setGoalReservations(Object.fromEntries(goalResEntries) as Record<string, Reservation[]>);
     } catch {
       setHasError(true);
     } finally {

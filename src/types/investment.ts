@@ -2,6 +2,8 @@ import { type RecordStatus } from "./transaction";
 
 export type AssetType = "emas" | "perak" | "crypto" | "saham" | "reksadana" | "obligasi" | "lainnya";
 
+export type InvestmentTransactionType = "buy" | "sell" | "opening";
+
 export interface Investment {
   id: string;
   owner_user_id?: string | null;
@@ -14,8 +16,8 @@ export interface Investment {
 export interface InvestmentTransaction {
   id: string;
   investment_id: string;
-  wallet_id: string;
-  type: "buy" | "sell";
+  wallet_id: string | null; // null untuk kepemilikan awal (opening)
+  type: InvestmentTransactionType;
   quantity: number;
   price: number; // price per unit at transaction time
   date: string;
