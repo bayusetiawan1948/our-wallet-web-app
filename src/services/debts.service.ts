@@ -5,6 +5,9 @@ interface DebtResponse {
   id: string;
   owner_user_id: string | null;
   owner_household_id: string | null;
+  wallet_id: string | null;
+  is_opening: boolean;
+  opening_paid: number;
   type: DebtType;
   counterparty: string;
   principal: number;
@@ -30,6 +33,9 @@ function toDebt(res: DebtResponse): Debt {
     id: res.id,
     owner_user_id: res.owner_user_id,
     owner_household_id: res.owner_household_id,
+    wallet_id: res.wallet_id,
+    is_opening: res.is_opening,
+    opening_paid: res.opening_paid,
     type: res.type,
     counterparty: res.counterparty,
     principal: res.principal,
@@ -63,6 +69,11 @@ export async function createDebt(data: {
   type: DebtType;
   counterparty: string;
   principal: number;
+  // Debt baru wajib memilih dompet; debt lama (is_opening) tanpa dompet.
+  wallet_id?: string;
+  is_opening?: boolean;
+  opening_paid?: number;
+  date?: string;
   portion_admin?: number;
   portion_member?: number;
   due_date?: string;
@@ -78,6 +89,8 @@ export async function updateDebt(
     type?: DebtType;
     counterparty?: string;
     principal?: number;
+    wallet_id?: string;
+    opening_paid?: number;
     portion_admin?: number;
     portion_member?: number;
     due_date?: string;

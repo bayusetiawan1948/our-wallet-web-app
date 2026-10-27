@@ -7,6 +7,11 @@ export interface Debt {
   id: string;
   owner_user_id?: string | null;
   owner_household_id?: string | null;
+  // Dompet tempat dana pokok masuk/keluar. Null untuk debt lama (opening).
+  wallet_id?: string | null;
+  is_opening?: boolean;
+  // Jumlah yang sudah dibayar sebelum debt dicatat (hanya opening).
+  opening_paid?: number;
   type: DebtType;
   counterparty: string;
   principal: number;

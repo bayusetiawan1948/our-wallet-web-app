@@ -60,7 +60,8 @@ export const DebtDetailDialog: React.FC<DebtDetailDialogProps> = ({
 
   const activePayments = payments.filter((p) => p.status === "active");
 
-  const totalPaid = activePayments.reduce((sum, p) => sum + p.amount, 0);
+  const totalPaid =
+    (debt.opening_paid ?? 0) + activePayments.reduce((sum, p) => sum + p.amount, 0);
   const remaining = Math.max(0, debt.principal - totalPaid);
   const progressPercent = Math.min(100, Math.round((totalPaid / debt.principal) * 100));
 

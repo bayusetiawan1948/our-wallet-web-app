@@ -127,16 +127,16 @@ export default function Page() {
   const totalLiabilities = activeUtangDebts.reduce((sum, debt, index) => {
     const payments = debtPaymentQueries[index]?.data ?? [];
     const paid = payments.filter((p) => p.status === "active").reduce((s, p) => s + p.amount, 0);
-    return sum + Math.max(debt.principal - paid, 0);
+    return sum + Math.max(debt.principal - (debt.opening_paid ?? 0) - paid, 0);
   }, 0);
 
   const netWorth = totalAssets - totalLiabilities;
 
   const periodIncome = periodTransactions
-    .filter((t) => t.status === "active" && t.type === "income")
+    .filter((t) => t.status === "active" && !t.source && t.type === "income")
     .reduce((sum, t) => sum + t.amount, 0);
   const periodExpense = periodTransactions
-    .filter((t) => t.status === "active" && t.type === "expense")
+    .filter((t) => t.status === "active" && !t.source && t.type === "expense")
     .reduce((sum, t) => sum + t.amount, 0);
   const savingsRate = periodIncome > 0 ? ((periodIncome - periodExpense) / periodIncome) * 100 : null;
 

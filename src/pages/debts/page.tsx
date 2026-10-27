@@ -135,6 +135,10 @@ export default function DebtsReceivablesPage() {
     () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
   );
   const [formNote, setFormNote] = useState("");
+  // Debt baru memilih dompet; debt lama (sudah ada sebelum memakai aplikasi) tanpa dompet.
+  const [formIsOpening, setFormIsOpening] = useState(false);
+  const [formWalletId, setFormWalletId] = useState("");
+  const [formOpeningPaidFormatted, setFormOpeningPaidFormatted] = useState("");
 
   // Payment Modal State
   const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
@@ -161,6 +165,9 @@ export default function DebtsReceivablesPage() {
     setFormPortionMemberFormatted("");
     setFormDueDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]);
     setFormNote("");
+    setFormIsOpening(false);
+    setFormWalletId(wallets[0]?.id ?? "");
+    setFormOpeningPaidFormatted("");
     setIsFormOpen(true);
   };
 
@@ -176,6 +183,11 @@ export default function DebtsReceivablesPage() {
     setFormPortionMemberFormatted(debt.portion_member ? formatCurrencyString(debt.portion_member) : "");
     setFormDueDate(debt.due_date);
     setFormNote(debt.note || "");
+    setFormIsOpening(Boolean(debt.is_opening));
+    setFormWalletId(debt.wallet_id ?? "");
+    setFormOpeningPaidFormatted(
+      debt.opening_paid ? formatCurrencyString(debt.opening_paid) : ""
+    );
     setIsFormOpen(true);
   };
 
@@ -191,14 +203,29 @@ export default function DebtsReceivablesPage() {
     const principal = parseCurrencyStringToNumber(formPrincipalFormatted);
     const portionAdmin = parseCurrencyStringToNumber(formPortionAdminFormatted);
     const portionMember = parseCurrencyStringToNumber(formPortionMemberFormatted);
+    const openingPaid = parseCurrencyStringToNumber(formOpeningPaidFormatted);
+
+    if (formIsOpening && openingPaid > principal) {
+      toast.error("Jumlah yang sudah dibayar tidak boleh melebihi nominal pokok");
+      return;
+    }
+
+    if (!formIsOpening && !formWalletId) {
+      toast.error("Pilih dompet tempat dana masuk/keluar");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       if (editingDebt) {
         await debtsService.updateDebt(editingDebt.id, {
-          type: formType,
+          // Tipe dikunci setelah debt menggerakkan saldo dompet.
+          ...(editingDebt.is_opening ? { type: formType } : {}),
           counterparty: formCounterparty,
           principal,
+          ...(editingDebt.is_opening
+            ? { opening_paid: openingPaid }
+            : { wallet_id: formWalletId }),
           portion_admin: formUsePortion ? portionAdmin : 0,
           portion_member: formUsePortion ? portionMember : 0,
           due_date: formDueDate,
@@ -211,6 +238,9 @@ export default function DebtsReceivablesPage() {
           type: formType,
           counterparty: formCounterparty,
           principal,
+          ...(formIsOpening
+            ? { is_opening: true, opening_paid: openingPaid }
+            : { wallet_id: formWalletId }),
           portion_admin: formUsePortion ? portionAdmin : 0,
           portion_member: formUsePortion ? portionMember : 0,
           due_date: formDueDate,
@@ -464,7 +494,8 @@ export default function DebtsReceivablesPage() {
                   const debtPayments = payments.filter(
                     (p) => p.debt_id === debt.id && p.status === "active"
                   );
-                  const paidTotal = debtPayments.reduce((sum, p) => sum + p.amount, 0);
+                  const paidTotal =
+                    (debt.opening_paid ?? 0) + debtPayments.reduce((sum, p) => sum + p.amount, 0);
                   const progressPct = Math.min(100, Math.round((paidTotal / debt.principal) * 100));
                   const isUtang = debt.type === "utang";
                   const status = STATUS_LABEL[debt.status] ?? STATUS_LABEL.active;
@@ -556,7 +587,7 @@ export default function DebtsReceivablesPage() {
                               {isUtang ? "Bayar" : "Terima"}
                             </Button>
                           )}
-                          {canEdit && (
+                          {canEdit && debt.status !== "cancelled" && (
                             <>
                               <Button
                                 size="icon"
@@ -614,7 +645,11 @@ export default function DebtsReceivablesPage() {
             <div className="grid gap-4 py-4 text-sm">
               <div className="grid gap-2">
                 <Label>Tipe Pencatatan</Label>
-                <Select value={formType} onValueChange={(val) => setFormType(val as DebtType)}>
+                <Select
+                  value={formType}
+                  onValueChange={(val) => setFormType(val as DebtType)}
+                  disabled={Boolean(editingDebt && !editingDebt.is_opening)}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -662,6 +697,57 @@ export default function DebtsReceivablesPage() {
                   required
                 />
               </div>
+
+              {!editingDebt && (
+                <div className="border border-border/60 rounded-lg p-3 bg-muted/20">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label className="text-xs font-semibold">Sudah ada sebelum memakai aplikasi</Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Saldo dompet tidak berubah. Isi pokok awal dan jumlah yang sudah dibayar.
+                      </p>
+                    </div>
+                    <Switch checked={formIsOpening} onCheckedChange={setFormIsOpening} />
+                  </div>
+                </div>
+              )}
+
+              {formIsOpening ? (
+                <div className="grid gap-2">
+                  <Label>Sudah Dibayar Sebelumnya</Label>
+                  <CurrencyInput
+                    placeholder="0"
+                    value={formOpeningPaidFormatted}
+                    onValueChange={(_, formatted) => setFormOpeningPaidFormatted(formatted)}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Pembayaran berikutnya tetap mengubah saldo dompet yang dipilih saat membayar.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  <Label>{formType === "utang" ? "Dompet Penerima Dana" : "Dompet Sumber Dana"}</Label>
+                  <Select value={formWalletId} onValueChange={setFormWalletId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih dompet..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {wallets.map((w) => (
+                        <SelectItem key={w.id} value={w.id}>
+                          {w.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    {editingDebt
+                      ? "Mengubah nominal atau dompet akan mencatat transaksi \"Revisi\" otomatis."
+                      : formType === "utang"
+                        ? "Saldo dompet bertambah sebesar pokok utang."
+                        : "Saldo dompet berkurang sebesar pokok piutang."}
+                  </p>
+                </div>
+              )}
 
               {/* Optional Portion Toggle */}
               <div className="border border-border/60 rounded-lg p-3 space-y-3 bg-muted/20">
@@ -834,7 +920,7 @@ export default function DebtsReceivablesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Konfirmasi Hapus Utang / Piutang</AlertDialogTitle>
             <AlertDialogDescription>
-              Apakah Anda yakin ingin menghapus catatan utang/piutang ini? Jika masih ada pembayaran aktif, penghapusan akan ditolak.
+              Apakah Anda yakin ingin menghapus catatan utang/piutang ini? Jika sudah memengaruhi saldo dompet, catatan akan dibatalkan dan transaksi pembatalan otomatis dibuat. Jika masih ada pembayaran aktif, pembatalan akan ditolak.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
