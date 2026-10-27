@@ -5,7 +5,10 @@ export type TransactionSource =
   | "debt_revision"
   | "debt_cancel"
   | "debt_payment"
-  | "debt_payment_void";
+  | "debt_payment_void"
+  | "investment_buy"
+  | "investment_sell"
+  | "investment_void";
 
 export interface Transaction {
   id: string;
@@ -20,10 +23,11 @@ export interface Transaction {
   attachment_url?: string;
   status: RecordStatus;
   correction_of_id?: string | null;
-  // Terisi untuk entri hasil utang/piutang; hanya bisa dibatalkan lewat menu Utang & Piutang.
+  // Terisi untuk entri hasil utang/piutang atau investasi; hanya bisa dibatalkan lewat menu asalnya.
   source?: TransactionSource | null;
   debt_id?: string | null;
   debt_payment_id?: string | null;
+  investment_transaction_id?: string | null;
 }
 
 export interface Transfer {

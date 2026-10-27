@@ -768,9 +768,13 @@ export default function TransactionsPage() {
                             {!isVoid && tx.source && (
                               <span
                                 className="text-[10px] text-muted-foreground"
-                                title="Transaksi ini berasal dari utang/piutang. Batalkan lewat menu Utang & Piutang."
+                                title={
+                                  tx.source.startsWith("investment_")
+                                    ? "Transaksi ini berasal dari investasi. Batalkan lewat menu Investasi."
+                                    : "Transaksi ini berasal dari utang/piutang. Batalkan lewat menu Utang & Piutang."
+                                }
                               >
-                                Via Utang &amp; Piutang
+                                {tx.source.startsWith("investment_") ? "Via Investasi" : "Via Utang & Piutang"}
                               </span>
                             )}
                             {!isVoid && !tx.source && (

@@ -17,6 +17,7 @@ interface TransactionResponse {
   source: TransactionSource | null;
   debt_id: string | null;
   debt_payment_id: string | null;
+  investment_transaction_id: string | null;
 }
 
 function toTransaction(res: TransactionResponse): Transaction {
@@ -36,6 +37,7 @@ function toTransaction(res: TransactionResponse): Transaction {
     source: res.source,
     debt_id: res.debt_id,
     debt_payment_id: res.debt_payment_id,
+    investment_transaction_id: res.investment_transaction_id,
   };
 }
 
