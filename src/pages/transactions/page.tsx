@@ -765,7 +765,15 @@ export default function TransactionsPage() {
                             {tx.type === "income" ? "+" : "-"} {formatRupiah(tx.amount)}
                           </TableCell>
                           <TableCell className="text-center">
-                            {!isVoid && (
+                            {!isVoid && tx.source && (
+                              <span
+                                className="text-[10px] text-muted-foreground"
+                                title="Transaksi ini berasal dari utang/piutang. Batalkan lewat menu Utang & Piutang."
+                              >
+                                Via Utang &amp; Piutang
+                              </span>
+                            )}
+                            {!isVoid && !tx.source && (
                               <Button
                                 variant="ghost"
                                 size="sm"

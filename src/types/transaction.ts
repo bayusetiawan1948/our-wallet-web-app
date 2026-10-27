@@ -1,5 +1,11 @@
 export type TransactionType = "income" | "expense";
 export type RecordStatus = "active" | "void";
+export type TransactionSource =
+  | "debt_create"
+  | "debt_revision"
+  | "debt_cancel"
+  | "debt_payment"
+  | "debt_payment_void";
 
 export interface Transaction {
   id: string;
@@ -14,6 +20,10 @@ export interface Transaction {
   attachment_url?: string;
   status: RecordStatus;
   correction_of_id?: string | null;
+  // Terisi untuk entri hasil utang/piutang; hanya bisa dibatalkan lewat menu Utang & Piutang.
+  source?: TransactionSource | null;
+  debt_id?: string | null;
+  debt_payment_id?: string | null;
 }
 
 export interface Transfer {

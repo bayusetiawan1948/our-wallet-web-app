@@ -1,5 +1,5 @@
 import { apiClient } from "@/lib/api-client";
-import type { Transaction, TransactionType } from "@/types";
+import type { Transaction, TransactionSource, TransactionType } from "@/types";
 
 interface TransactionResponse {
   id: string;
@@ -14,6 +14,9 @@ interface TransactionResponse {
   attachment_url: string | null;
   status: "active" | "void";
   correction_of_id: string | null;
+  source: TransactionSource | null;
+  debt_id: string | null;
+  debt_payment_id: string | null;
 }
 
 function toTransaction(res: TransactionResponse): Transaction {
@@ -30,6 +33,9 @@ function toTransaction(res: TransactionResponse): Transaction {
     attachment_url: res.attachment_url ?? undefined,
     status: res.status,
     correction_of_id: res.correction_of_id,
+    source: res.source,
+    debt_id: res.debt_id,
+    debt_payment_id: res.debt_payment_id,
   };
 }
 
