@@ -61,3 +61,13 @@ export function formatRelativeDateTime(
 
   return `${relativeLabel}, ${formattedDate}`;
 }
+/** Waktu lokal sekarang untuk value `<input type="datetime-local">` (yyyy-MM-ddTHH:mm). */
+export function nowLocalDateTime(): string {
+  return format(new Date(), "yyyy-MM-dd'T'HH:mm");
+}
+
+/** Format ISO datetime dari API ke tampilan lokal (dd-MM-yyyy HH:mm). */
+export function formatDateTime(input: string): string {
+  const date = new Date(input);
+  return isNaN(date.getTime()) ? input : format(date, 'dd-MM-yyyy HH:mm');
+}

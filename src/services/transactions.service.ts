@@ -71,6 +71,36 @@ export async function createTransaction(data: {
   return toTransaction(res.data.data);
 }
 
+export interface BulkTransactionItem {
+  category_id: string;
+  type: TransactionType;
+  amount: number;
+  date: string;
+  note?: string;
+}
+
+export async function checkDuplicateTransactions(
+  walletId: string,
+  items: Array<Omit<BulkTransactionItem, "category_id">>
+): Promise<number[]> {
+  const res = await apiClient.post<{ data: { duplicate_indexes: number[] } }>(
+    "/transactions/check-duplicates",
+    { wallet_id: walletId, items }
+  );
+  return res.data.data.duplicate_indexes;
+}
+
+export async function bulkCreateTransactions(data: {
+  wallet_id: string;
+  owner_id?: string;
+  items: BulkTransactionItem[];
+}): Promise<{ inserted: number; skipped: number }> {
+  const res = await apiClient.post<{
+    data: { inserted: number; skipped: number };
+  }>("/transactions/bulk", data);
+  return res.data.data;
+}
+
 export async function voidTransaction(id: string): Promise<Transaction> {
   const res = await apiClient.post<{ data: TransactionResponse }>(
     `/transactions/${id}/void`

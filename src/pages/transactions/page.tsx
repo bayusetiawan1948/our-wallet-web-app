@@ -28,10 +28,12 @@ import {
   SwapIcon,
   TagIcon,
 } from "@phosphor-icons/react";
+import { ImportTransactionsDialog } from "@/components/feature/transactions/import-transactions-dialog";
 import { CategoryManagement } from "@/components/feature/categories/category-management";
 import type { Wallet, Category, Transaction, Transfer, Reservation, Budget, Goal } from "@/types";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { formatRupiah } from "@/libs/number";
+import { formatDateTime, nowLocalDateTime } from "@/libs/date";
 import { Button } from "@/components/ui/button";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -113,7 +115,7 @@ export default function TransactionsPage() {
   const [txWalletId, setTxWalletId] = useState<string>("");
   const [txCategoryId, setTxCategoryId] = useState<string>("");
   const [txAmount, setTxAmount] = useState<string>("");
-  const [txDate, setTxDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [txDate, setTxDate] = useState<string>(nowLocalDateTime());
   const [txNote, setTxNote] = useState<string>("");
 
   useEffect(() => {
@@ -171,7 +173,7 @@ export default function TransactionsPage() {
       owner_id: activeUserId,
       type: txType as "income" | "expense",
       amount: numTxAmount,
-      date: txDate,
+      date: new Date(txDate).toISOString(),
       note: txNote,
       encroachments,
     });
@@ -414,6 +416,13 @@ export default function TransactionsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <ImportTransactionsDialog
+            wallets={accessibleWallets}
+            categories={categories}
+            ownerId={activeUserId || undefined}
+            onImported={loadData}
+          />
+
           {/* Unified Transaction & Transfer Dialog */}
           <Dialog open={isTxOpen} onOpenChange={setIsTxOpen}>
             <DialogTrigger asChild>
@@ -530,7 +539,7 @@ export default function TransactionsPage() {
                       <div className="grid min-w-0 gap-1.5">
                         <Label className="text-xs font-medium">Tanggal</Label>
                         <Input
-                          type="date"
+                          type="datetime-local"
                           className="h-9"
                           value={txDate}
                           onChange={(e) => setTxDate(e.target.value)}
@@ -733,7 +742,7 @@ export default function TransactionsPage() {
 
                       return (
                         <TableRow key={tx.id} className={isVoid ? "opacity-40 bg-muted/20 line-through" : ""}>
-                          <TableCell className="font-mono text-xs">{tx.date}</TableCell>
+                          <TableCell className="font-mono text-xs">{formatDateTime(tx.date)}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1.5">
                               {tx.type === "income" ? (
