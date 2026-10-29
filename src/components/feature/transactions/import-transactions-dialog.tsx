@@ -3,6 +3,7 @@ import Papa from "papaparse";
 import { toast } from "sonner";
 import {
   CheckCircleIcon,
+  CopyIcon,
   DownloadSimpleIcon,
   FileCsvIcon,
   PlusIcon,
@@ -16,8 +17,10 @@ import { nowLocalDateTime } from "@/libs/date";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,6 +57,24 @@ import {
 } from "@/components/ui/table";
 
 const MAX_ROWS = 1000;
+
+const PDF_TO_CSV_PROMPT = `Kamu adalah asisten yang mengubah rekening koran / mutasi bank (PDF terlampir) menjadi CSV.
+
+Aturan output:
+- Keluarkan HANYA isi CSV dalam satu code block, tanpa penjelasan.
+- Baris pertama (header) persis: date,description,debit,credit,category
+- date: format YYYY-MM-DD HH:mm:ss (jika jam tidak ada, pakai 00:00:00).
+- description: keterangan transaksi apa adanya; jika mengandung koma, apit dengan tanda kutip ganda.
+- debit: nominal uang KELUAR, angka bulat tanpa titik/koma/simbol "Rp"; isi 0 jika bukan pengeluaran.
+- credit: nominal uang MASUK, angka bulat tanpa titik/koma/simbol "Rp"; isi 0 jika bukan pemasukan.
+- category: kosongkan jika tidak yakin.
+- Satu baris per transaksi, urut dari yang paling lama. Jangan sertakan baris saldo awal/akhir atau total.
+- Jangan mengarang data; lewati baris yang tidak terbaca.
+
+Contoh:
+date,description,debit,credit,category
+2026-10-01 08:10:00,GAJI OKTOBER,0,8000000,
+2026-10-01 12:45:00,QRIS WARUNG MAKAN,35000,0,`;
 
 interface ImportRow {
   key: string;
@@ -120,7 +141,7 @@ function parseAmount(raw: unknown): number {
     normalized = isThousands ? parts.join("") : parts.join(".");
   }
   const n = parseFloat(normalized);
-  return isNaN(n) ? 0 : n;
+  return isNaN(n) ? 0 : Math.round(n); // Rupiah tanpa desimal
 }
 
 const findKey = (keys: string[], pattern: RegExp) =>
@@ -401,6 +422,15 @@ export function ImportTransactionsDialog({
     }
   };
 
+  const copyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(PDF_TO_CSV_PROMPT);
+      toast.success("Prompt disalin. Tempel ke ChatGPT/Claude bersama file PDF Anda.");
+    } catch {
+      toast.error("Gagal menyalin prompt");
+    }
+  };
+
   const downloadTemplate = () => {
     const sample = [
       "date,description,debit,credit,category",
@@ -429,7 +459,7 @@ export function ImportTransactionsDialog({
           </Button>
         </DialogTrigger>
 
-        <DialogContent className="sm:max-w-[960px] max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+        <DialogContent className="sm:max-w-[1200px] w-[96vw] max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
           <DialogHeader className="p-6 pb-4 border-b border-border/60">
             <DialogTitle>Import Transaksi (CSV)</DialogTitle>
             <DialogDescription>
@@ -437,7 +467,7 @@ export function ImportTransactionsDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="p-6 space-y-4 overflow-y-auto flex-1">
+          <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1">
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1.5 min-w-[240px]">
                 <Label className="text-xs font-semibold">Wallet tujuan</Label>
@@ -488,14 +518,24 @@ export function ImportTransactionsDialog({
               )}
             </div>
 
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              <span>
+                Data masih berupa PDF? Salin prompt, tempel ke ChatGPT/Claude bersama PDF-nya, lalu unggah CSV hasilnya.
+              </span>
+              <Button variant="outline" size="sm" className="gap-2 h-7" onClick={copyPrompt}>
+                <CopyIcon className="size-3.5" />
+                Salin prompt PDF → CSV
+              </Button>
+            </div>
+
             {rows.length === 0 ? (
               <div className="border-2 border-dashed rounded-xl p-10 text-center text-sm text-muted-foreground">
                 Belum ada data. Pilih CSV atau klik &quot;Tambah baris&quot; untuk input manual.
               </div>
             ) : (
               <>
-                <div className="border rounded-lg overflow-auto max-h-[380px]">
-                  <Table className="text-xs">
+                <div className="border rounded-lg overflow-auto max-h-[55vh]">
+                  <Table className="text-xs min-w-[1000px]">
                     <TableHeader className="bg-muted/60 sticky top-0 z-10">
                       <TableRow>
                         <TableHead className="w-[40px] text-center">
@@ -508,12 +548,12 @@ export function ImportTransactionsDialog({
                             }
                           />
                         </TableHead>
-                        <TableHead className="w-[190px]">Tanggal & jam</TableHead>
-                        <TableHead className="w-[120px]">Jenis</TableHead>
-                        <TableHead>Catatan</TableHead>
-                        <TableHead className="w-[170px]">Kategori</TableHead>
-                        <TableHead className="w-[130px] text-right">Nominal</TableHead>
-                        <TableHead className="w-[130px]">Status</TableHead>
+                        <TableHead className="w-[170px]">Tanggal & jam</TableHead>
+                        <TableHead className="w-[115px]">Jenis</TableHead>
+                        <TableHead className="min-w-[320px]">Catatan</TableHead>
+                        <TableHead className="w-[150px]">Kategori</TableHead>
+                        <TableHead className="w-[140px] text-right">Nominal</TableHead>
+                        <TableHead className="w-[90px]">Status</TableHead>
                         <TableHead className="w-[40px]" />
                       </TableRow>
                     </TableHeader>
@@ -569,10 +609,11 @@ export function ImportTransactionsDialog({
                               </Select>
                             </TableCell>
                             <TableCell className="p-1.5">
-                              <Input
+                              <Textarea
+                                rows={2}
                                 value={row.note}
                                 onChange={(e) => updateRow(row.key, "note", e.target.value)}
-                                className="h-7 text-xs"
+                                className="min-h-[2.75rem] resize-y text-xs leading-snug px-2 py-1"
                               />
                             </TableCell>
                             <TableCell className="p-1.5">
@@ -593,15 +634,10 @@ export function ImportTransactionsDialog({
                               </Select>
                             </TableCell>
                             <TableCell className="p-1.5">
-                              <Input
-                                type="number"
-                                min={0}
-                                step="0.01"
+                              <CurrencyInput
                                 value={row.amount || ""}
-                                onChange={(e) =>
-                                  updateRow(row.key, "amount", parseFloat(e.target.value) || 0)
-                                }
-                                className="h-7 text-xs text-right font-semibold"
+                                onValueChange={(n) => updateRow(row.key, "amount", n)}
+                                className="text-right font-semibold"
                               />
                             </TableCell>
                             <TableCell className="p-1.5">

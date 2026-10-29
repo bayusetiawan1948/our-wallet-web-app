@@ -141,13 +141,12 @@ export const DebtDetailDialog: React.FC<DebtDetailDialogProps> = ({
               </DialogDescription>
             </div>
 
-            {canEdit && (
+            {canEdit && !isLocked && (
               <div className="flex items-center gap-1.5 pt-1">
                 <Button
                   size="sm"
                   variant="outline"
                   className="h-8 px-2.5 text-xs gap-1"
-                  disabled={isLocked}
                   onClick={() => {
                     onOpenChange(false);
                     onEditClick(debt);
@@ -159,7 +158,6 @@ export const DebtDetailDialog: React.FC<DebtDetailDialogProps> = ({
                   size="sm"
                   variant="outline"
                   className="h-8 px-2.5 text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 border-rose-200 dark:border-rose-900/50"
-                  disabled={isLocked}
                   onClick={() => {
                     onOpenChange(false);
                     onDeleteClick(debt.id);
