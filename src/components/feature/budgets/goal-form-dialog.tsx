@@ -184,6 +184,8 @@ function GoalFormDialogContent({
   };
 
   const totalReservedInForm = reservations.reduce((sum, r) => sum + (r.reserved_amount || 0), 0);
+  const targetValue = parseFloat(targetAmount) || 0;
+  const isOverTarget = totalReservedInForm > targetValue;
 
   return (
     <form onSubmit={handleSubmit}>
@@ -390,6 +392,12 @@ function GoalFormDialogContent({
               {formatRupiah(totalReservedInForm)}
             </span>
           </div>
+          {isOverTarget && (
+            <p className="text-xs text-destructive">
+              Total reservasi ({formatRupiah(totalReservedInForm)}) tidak boleh melebihi target nominal (
+              {formatRupiah(targetValue)}).
+            </p>
+          )}
         </div>
       </div>
 
@@ -397,7 +405,7 @@ function GoalFormDialogContent({
         <Button type="button" variant="outline" onClick={onClose}>
           Batal
         </Button>
-        <Button type="submit" disabled={isSubmitting || isLoadingData} className="bg-primary text-primary-foreground font-medium">
+        <Button type="submit" disabled={isSubmitting || isLoadingData || isOverTarget}className="bg-primary text-primary-foreground font-medium">
           {goalToEdit ? "Simpan Perubahan" : "Buat Financial Goal"}
         </Button>
       </DialogFooter>

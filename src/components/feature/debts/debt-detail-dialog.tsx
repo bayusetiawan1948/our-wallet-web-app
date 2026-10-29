@@ -75,7 +75,10 @@ export const DebtDetailDialog: React.FC<DebtDetailDialogProps> = ({
 
   const isOverdue = diffDays < 0 && debt.status !== "paid" && debt.status !== "cancelled";
 
-  const hasPortion = Boolean(debt.portion_admin || debt.portion_member);
+  // Utang lunas atau dibatalkan sudah final, tidak boleh diubah lagi.
+  const isLocked = debt.status === "paid" || debt.status === "cancelled";
+
+  const hasPortion =Boolean(debt.portion_admin || debt.portion_member);
   const portionAdmin = debt.portion_admin ?? debt.principal / 2;
   const portionMember = debt.portion_member ?? debt.principal / 2;
   const adminRatio = debt.principal > 0 ? portionAdmin / debt.principal : 0.5;
@@ -144,6 +147,7 @@ export const DebtDetailDialog: React.FC<DebtDetailDialogProps> = ({
                   size="sm"
                   variant="outline"
                   className="h-8 px-2.5 text-xs gap-1"
+                  disabled={isLocked}
                   onClick={() => {
                     onOpenChange(false);
                     onEditClick(debt);
@@ -155,6 +159,7 @@ export const DebtDetailDialog: React.FC<DebtDetailDialogProps> = ({
                   size="sm"
                   variant="outline"
                   className="h-8 px-2.5 text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 border-rose-200 dark:border-rose-900/50"
+                  disabled={isLocked}
                   onClick={() => {
                     onOpenChange(false);
                     onDeleteClick(debt.id);

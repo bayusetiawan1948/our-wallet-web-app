@@ -202,6 +202,8 @@ function BudgetFormDialogContent({
   };
 
   const totalReservedInForm = reservations.reduce((sum, r) => sum + (r.reserved_amount || 0), 0);
+  const targetValue = parseFloat(targetAmount) || 0;
+  const isOverTarget = totalReservedInForm > targetValue;
 
   return (
     <form onSubmit={handleSubmit}>
@@ -373,7 +375,11 @@ function BudgetFormDialogContent({
                       <SelectContent>
                         <SelectItem value="manual">Manual Nominal</SelectItem>
                         <SelectItem value="percentage">Persentase Income</SelectItem>
-                        <SelectItem value="formula">Formula Preset</SelectItem>
+                        {/* Formula Preset disembunyikan sementara; reservasi lama bermetode formula tetap ditampilkan */}
+                        {res.allocation_method === "formula" && (
+                          <SelectItem value="formula">Formula Preset</SelectItem>
+                        )}
+                        {/* <SelectItem value="formula">Formula Preset</SelectItem> */}
                       </SelectContent>
                     </Select>
                   </div>
@@ -418,6 +424,12 @@ function BudgetFormDialogContent({
               {formatRupiah(totalReservedInForm)}
             </span>
           </div>
+          {isOverTarget && (
+            <p className="text-xs text-destructive">
+              Total reservasi ({formatRupiah(totalReservedInForm)}) tidak boleh melebihi target nominal per
+              periode ({formatRupiah(targetValue)}).
+            </p>
+          )}
         </div>
       </div>
 
@@ -425,7 +437,7 @@ function BudgetFormDialogContent({
         <Button type="button" variant="outline" onClick={onClose}>
           Batal
         </Button>
-        <Button type="submit" disabled={isSubmitting || isLoadingData} className="bg-primary text-primary-foreground font-medium">
+        <Button type="submit" disabled={isSubmitting || isLoadingData || isOverTarget}className="bg-primary text-primary-foreground font-medium">
           {budgetToEdit ? "Simpan Perubahan" : "Buat Budget"}
         </Button>
       </DialogFooter>

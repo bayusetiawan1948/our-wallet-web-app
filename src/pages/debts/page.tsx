@@ -587,7 +587,7 @@ export default function DebtsReceivablesPage() {
                               {isUtang ? "Bayar" : "Terima"}
                             </Button>
                           )}
-                          {canEdit && debt.status !== "cancelled" && (
+                          {canEdit && debt.status !== "cancelled" && debt.status !== "paid" && (
                             <>
                               <Button
                                 size="icon"
