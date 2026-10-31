@@ -173,6 +173,7 @@ export function ImportTransactionsDialog({
   const walletId = selectedWalletId || wallets[0]?.id || "";
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [fileName, setFileName] = useState("");
+  const [pasteText, setPasteText] = useState("");
   const [duplicateKeys, setDuplicateKeys] = useState<Set<string>>(new Set());
   const [isChecking, setIsChecking] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
@@ -184,6 +185,7 @@ export function ImportTransactionsDialog({
   const reset = () => {
     setRows([]);
     setFileName("");
+    setPasteText("");
     setDuplicateKeys(new Set());
     setIsConfirmOpen(false);
     setIsSaving(false);
@@ -194,13 +196,9 @@ export function ImportTransactionsDialog({
     if (!open) reset();
   };
 
-  const handleFile = (file: File) => {
-    if (!file.name.toLowerCase().endsWith(".csv")) {
-      toast.error("Format berkas harus .csv");
-      return;
-    }
-
-    Papa.parse<Record<string, string>>(file, {
+  const parseCsvText = (text: string, sourceLabel: string): boolean => {
+    let ok = false;
+    Papa.parse<Record<string, string>>(text, {
       header: true,
       skipEmptyLines: true,
       complete: (results) => {
@@ -269,11 +267,32 @@ export function ImportTransactionsDialog({
           return;
         }
 
-        setFileName(file.name);
+        setFileName(sourceLabel);
         setRows(parsed);
+        ok = true;
       },
-      error: (err) => toast.error(`Gagal membaca CSV: ${err.message}`),
     });
+    return ok;
+  };
+
+  const handleFile = async (file: File) => {
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      toast.error("Format berkas harus .csv");
+      return;
+    }
+    try {
+      parseCsvText(await file.text(), file.name);
+    } catch (err) {
+      toast.error(`Gagal membaca CSV: ${err instanceof Error ? err.message : "tidak diketahui"}`);
+    }
+  };
+
+  const handlePasteProcess = () => {
+    if (!pasteText.trim()) {
+      toast.error("Tempel isi CSV terlebih dahulu");
+      return;
+    }
+    if (parseCsvText(pasteText, "CSV dari tempel")) setPasteText("");
   };
 
   const updateRow = <K extends keyof ImportRow>(
@@ -528,9 +547,30 @@ export function ImportTransactionsDialog({
               </Button>
             </div>
 
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Atau tempel isi CSV</Label>
+              <Textarea
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value)}
+                placeholder={"date,description,debit,credit,category\n2026-10-01 08:10:00,GAJI OKTOBER,0,8000000,"}
+                spellCheck={false}
+                className="font-mono text-xs min-h-24 max-h-48"
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                className="gap-2"
+                disabled={!pasteText.trim()}
+                onClick={handlePasteProcess}
+              >
+                <CheckCircleIcon className="size-4" />
+                Proses CSV
+              </Button>
+            </div>
+
             {rows.length === 0 ? (
               <div className="border-2 border-dashed rounded-xl p-10 text-center text-sm text-muted-foreground">
-                Belum ada data. Pilih CSV atau klik &quot;Tambah baris&quot; untuk input manual.
+                Belum ada data. Pilih/tempel CSV atau klik &quot;Tambah baris&quot; untuk input manual.
               </div>
             ) : (
               <>
