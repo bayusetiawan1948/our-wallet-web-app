@@ -110,8 +110,8 @@ function BudgetFormDialogContent({
       } finally {
         setIsLoadingData(false);
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleAddReservationRow = () => {
